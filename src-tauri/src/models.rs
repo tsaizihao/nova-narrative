@@ -1,0 +1,239 @@
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    rules::{ActiveRuleHit, RuleDefinition},
+    state::{LoreLifecycleRecord, StoryState},
+    worldbook::{ActiveLoreEntry, WorldBookEntry},
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildStage {
+    #[default]
+    Created,
+    Imported,
+    Analyzing,
+    Compiling,
+    Ready,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BuildStatus {
+    pub stage: BuildStage,
+    pub message: String,
+    pub progress: u8,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChapterChunk {
+    pub id: String,
+    pub order: usize,
+    pub title: String,
+    pub content: String,
+    pub excerpt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NovelProject {
+    pub id: String,
+    pub name: String,
+    pub raw_text: String,
+    pub chapters: Vec<ChapterChunk>,
+    pub build_status: BuildStatus,
+    pub story_package: Option<StoryPackage>,
+    pub character_cards: Vec<CharacterCard>,
+    pub worldbook_entries: Vec<WorldBookEntry>,
+    pub rules: Vec<RuleDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CharacterCard {
+    pub id: String,
+    pub name: String,
+    pub gender: String,
+    pub age: Option<u16>,
+    pub identity: String,
+    pub faction: String,
+    pub role: String,
+    pub summary: String,
+    pub desire: String,
+    pub secrets: Vec<String>,
+    pub traits: Vec<String>,
+    pub abilities: Vec<String>,
+    pub mutable_state: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LocationCard {
+    pub id: String,
+    pub name: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TimelineEntry {
+    pub id: String,
+    pub label: String,
+    pub order: usize,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorldRule {
+    pub id: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RelationshipEdge {
+    pub source: String,
+    pub target: String,
+    pub label: String,
+    pub strength: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CoreConflict {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StoryBible {
+    pub title: String,
+    pub characters: Vec<CharacterCard>,
+    pub locations: Vec<LocationCard>,
+    pub timeline: Vec<TimelineEntry>,
+    pub world_rules: Vec<WorldRule>,
+    pub relationships: Vec<RelationshipEdge>,
+    pub core_conflicts: Vec<CoreConflict>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorldModelSnapshot {
+    pub character_cards: Vec<CharacterCard>,
+    pub worldbook_entries: Vec<WorldBookEntry>,
+    pub rules: Vec<RuleDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DialogueLine {
+    pub speaker: String,
+    pub text: String,
+    pub emotion: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StateEffect {
+    pub key: String,
+    pub delta: i32,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChoiceOption {
+    pub id: String,
+    pub label: String,
+    pub intent_tag: String,
+    pub state_effects: Vec<StateEffect>,
+    pub unlock_conditions: Vec<String>,
+    pub next_scene_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EndingReport {
+    pub ending_type: String,
+    pub summary: String,
+    pub decisive_turns: Vec<String>,
+    pub unresolved_threads: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SceneNode {
+    pub id: String,
+    pub chapter: usize,
+    pub title: String,
+    pub summary: String,
+    pub narration: Vec<String>,
+    pub dialogue: Vec<DialogueLine>,
+    pub entry_conditions: Vec<String>,
+    pub present_characters: Vec<String>,
+    pub candidate_choices: Vec<ChoiceOption>,
+    pub fallback_next: Option<String>,
+    pub allow_free_input: bool,
+    pub checkpoint: bool,
+    pub ending: Option<EndingReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StoryPackage {
+    pub story_bible: StoryBible,
+    pub world_model: WorldModelSnapshot,
+    pub start_scene_id: String,
+    pub scenes: BTreeMap<String, SceneNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CheckpointMarker {
+    pub id: String,
+    pub label: String,
+    pub scene_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CheckpointSnapshot {
+    pub checkpoint: CheckpointMarker,
+    pub current_scene_id: String,
+    pub visited_scenes: Vec<String>,
+    pub known_facts: Vec<String>,
+    pub relationship_deltas: BTreeMap<String, i32>,
+    pub rule_flags: Vec<String>,
+    pub major_choices: Vec<String>,
+    pub story_state: StoryState,
+    pub lore_lifecycle: Vec<LoreLifecycleRecord>,
+    pub last_active_rules: Vec<ActiveRuleHit>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SessionState {
+    pub session_id: String,
+    pub project_id: String,
+    pub current_scene_id: String,
+    pub visited_scenes: Vec<String>,
+    pub known_facts: Vec<String>,
+    pub relationship_deltas: BTreeMap<String, i32>,
+    pub rule_flags: Vec<String>,
+    pub major_choices: Vec<String>,
+    pub available_checkpoints: Vec<CheckpointSnapshot>,
+    pub free_input_history: Vec<String>,
+    pub ending_report: Option<EndingReport>,
+    pub story_state: StoryState,
+    pub lore_lifecycle: Vec<LoreLifecycleRecord>,
+    pub last_active_rules: Vec<ActiveRuleHit>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StoryCodex {
+    pub characters: Vec<CharacterCard>,
+    pub locations: Vec<LocationCard>,
+    pub world_rules: Vec<WorldRule>,
+    pub relationships: Vec<RelationshipEdge>,
+    pub timeline: Vec<TimelineEntry>,
+    pub recent_choices: Vec<String>,
+    pub worldbook_entries: Vec<WorldBookEntry>,
+    pub rules: Vec<RuleDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ScenePayload {
+    pub scene: SceneNode,
+    pub session: SessionState,
+    pub active_lore: Vec<ActiveLoreEntry>,
+    pub active_rules: Vec<ActiveRuleHit>,
+    pub story_state: StoryState,
+}
