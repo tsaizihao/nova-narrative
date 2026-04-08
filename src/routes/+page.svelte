@@ -3,6 +3,7 @@
   import CharacterReviewPanel from '$lib/components/CharacterReviewPanel.svelte';
   import EndingScreen from '$lib/components/EndingScreen.svelte';
   import ImportScreen from '$lib/components/ImportScreen.svelte';
+  import PhaseStepper from '$lib/components/PhaseStepper.svelte';
   import ReaderStage from '$lib/components/ReaderStage.svelte';
   import RuleBookPanel from '$lib/components/RuleBookPanel.svelte';
   import StoryCodexPanel from '$lib/components/StoryCodexPanel.svelte';
@@ -25,8 +26,10 @@
   } from '$lib/types';
 
   type Phase = 'import' | 'building' | 'review' | 'reader' | 'ending';
+  type StepperPhase = Exclude<Phase, 'ending'>;
 
   let phase: Phase = 'import';
+  let stepperPhase: StepperPhase = 'import';
   let projectName = SAMPLE_PROJECT_NAME;
   let novelText = SAMPLE_NOVEL;
   let project: NovelProject | null = null;
@@ -45,6 +48,7 @@
   let freeInput = '';
   let busy = false;
 
+  const phaseLabels = ['导入', '构建', '审阅', '游玩'];
   const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
 
   async function refreshCodex(sessionId: string) {
@@ -269,6 +273,8 @@
     novelText = SAMPLE_NOVEL;
     error = '';
   }
+
+  $: stepperPhase = phase === 'ending' ? 'reader' : phase;
 </script>
 
 <svelte:head>
@@ -282,9 +288,12 @@
   <header class="topbar">
     <div>
       <p>Nova Narrative</p>
-      <strong>AI 互动视觉小说阅读器</strong>
+      <strong>小说改编工作台</strong>
     </div>
-    <span>{project?.name ?? '单本项目制'}</span>
+    <div class="topbar-meta">
+      <span>{project?.name ?? '单本项目制'}</span>
+      <PhaseStepper phase={stepperPhase} labels={phaseLabels} />
+    </div>
   </header>
 
   {#if phase === 'import'}
@@ -388,9 +397,9 @@
     margin: 0;
     min-height: 100vh;
     background:
-      radial-gradient(circle at top, rgba(199, 160, 98, 0.2), transparent 30%),
-      linear-gradient(160deg, #120f0d 0%, #201612 45%, #40261a 100%);
-    color: #f3ead8;
+      radial-gradient(circle at top, rgba(215, 194, 166, 0.4), transparent 30%),
+      linear-gradient(180deg, #f6f1e8 0%, #efe7da 100%);
+    color: #2f261d;
     font-family: 'IBM Plex Sans', 'PingFang SC', sans-serif;
   }
 
@@ -420,14 +429,14 @@
     inset: 0 auto auto -100px;
     width: 320px;
     height: 320px;
-    background: rgba(207, 153, 74, 0.2);
+    background: rgba(218, 196, 160, 0.34);
   }
 
   .page-glow-right {
     inset: 120px -60px auto auto;
     width: 280px;
     height: 280px;
-    background: rgba(89, 49, 28, 0.35);
+    background: rgba(181, 149, 113, 0.18);
   }
 
   .topbar {
@@ -438,12 +447,13 @@
     align-items: center;
     gap: 18px;
     margin: 0 auto 22px;
-    width: min(1440px, 100%);
+    width: min(1280px, 100%);
     padding: 16px 20px;
-    border-radius: 20px;
-    border: 1px solid rgba(255, 243, 214, 0.08);
-    background: rgba(15, 11, 8, 0.55);
-    backdrop-filter: blur(18px);
+    border-radius: 24px;
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(250, 246, 239, 0.86);
+    box-shadow: 0 16px 36px rgba(70, 54, 39, 0.08);
+    backdrop-filter: blur(14px);
   }
 
   .topbar p,
@@ -454,9 +464,9 @@
 
   .topbar p {
     font-size: 0.72rem;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: #d2b37b;
+    color: #91765d;
   }
 
   .topbar strong {
@@ -466,8 +476,14 @@
     font-size: 1.35rem;
   }
 
+  .topbar-meta {
+    display: grid;
+    justify-items: end;
+    gap: 10px;
+  }
+
   .topbar span {
-    color: rgba(255, 243, 214, 0.68);
+    color: rgba(63, 47, 35, 0.64);
     font-size: 0.9rem;
   }
 
@@ -606,6 +622,16 @@
     .review-grid,
     .reader-grid {
       grid-template-columns: 1fr;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr;
+      align-items: flex-start;
+    }
+
+    .topbar-meta {
+      justify-items: start;
     }
   }
 
