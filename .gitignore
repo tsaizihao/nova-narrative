@@ -1,4 +1,5 @@
 node_modules
+.worktrees
 .svelte-kit
 build
 dist
@@ -7,4 +8,3 @@ src-tauri/target
 src-tauri/gen
 *.log
 .DS_Store
-
