@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
 import ReaderDesktopShell from './ReaderDesktopShell.svelte';
+import ReaderMobileShell from './ReaderMobileShell.svelte';
 import type { ScenePayload, SessionState } from '$lib/types';
 
 const storyState = {
@@ -99,5 +100,35 @@ describe('ReaderDesktopShell', () => {
     expect(screen.getByRole('heading', { name: '北门之夜' })).toBeInTheDocument();
     expect(screen.getByText('世界侧栏')).toBeInTheDocument();
     expect(screen.getByText('世界状态')).toBeInTheDocument();
+  });
+});
+
+describe('ReaderMobileShell', () => {
+  it('keeps lore and state hidden until their drawers are opened', async () => {
+    render(ReaderMobileShell, {
+      props: {
+        payload,
+        codex: null,
+        freeInput: '',
+        busy: false,
+        error: ''
+      }
+    });
+
+    expect(screen.queryByRole('dialog', { name: '世界侧栏' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '世界状态' })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: '打开世界信息' }));
+    const worldDialog = screen.getByRole('dialog', { name: '世界侧栏' });
+    expect(worldDialog).toHaveAttribute('aria-modal', 'true');
+
+    await fireEvent.click(screen.getByRole('button', { name: '打开状态信息' }));
+    expect(screen.queryByRole('dialog', { name: '世界侧栏' })).not.toBeInTheDocument();
+
+    const stateDialog = screen.getByRole('dialog', { name: '世界状态' });
+    expect(stateDialog).toHaveAttribute('aria-modal', 'true');
+
+    await fireEvent.keyDown(stateDialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '世界状态' })).not.toBeInTheDocument();
   });
 });

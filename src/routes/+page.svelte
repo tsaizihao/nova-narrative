@@ -1,11 +1,15 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+
   import BuildProgressScreen from '$lib/components/BuildProgressScreen.svelte';
   import EndingScreen from '$lib/components/EndingScreen.svelte';
   import ImportScreen from '$lib/components/ImportScreen.svelte';
   import PhaseStepper from '$lib/components/PhaseStepper.svelte';
   import ReaderDesktopShell from '$lib/components/ReaderDesktopShell.svelte';
+  import ReaderMobileShell from '$lib/components/ReaderMobileShell.svelte';
   import ReviewWorkspace from '$lib/components/ReviewWorkspace.svelte';
   import { api } from '$lib/api/client';
+  import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
   import type {
     ActiveLoreEntry,
@@ -28,6 +32,7 @@
   let projectName = SAMPLE_PROJECT_NAME;
   let novelText = SAMPLE_NOVEL;
   let project: NovelProject | null = null;
+  let readerLayoutMode: ReaderLayoutMode = 'desktop';
   let buildStatus: BuildStatus = {
     stage: 'created',
     message: '等待新的故事',
@@ -270,6 +275,17 @@
   }
 
   $: stepperPhase = phase === 'ending' ? 'reader' : phase;
+
+  onMount(() => {
+    const updateReaderLayout = () => {
+      readerLayoutMode = resolveReaderLayoutMode(window.innerWidth);
+    };
+
+    updateReaderLayout();
+    window.addEventListener('resize', updateReaderLayout);
+
+    return () => window.removeEventListener('resize', updateReaderLayout);
+  });
 </script>
 
 <svelte:head>
@@ -330,18 +346,32 @@
       />
     </div>
   {:else if phase === 'reader' && payload && activeSession}
-    <ReaderDesktopShell
-      {payload}
-      codex={codex}
-      session={activeSession}
-      {freeInput}
-      {busy}
-      {error}
-      on:choose={(event) => choose(event.detail)}
-      on:freeInputChange={(event) => (freeInput = event.detail)}
-      on:submitFreeInput={submitFreeInput}
-      on:rewind={(event) => rewind(event.detail)}
-    />
+    {#if readerLayoutMode === 'desktop'}
+      <ReaderDesktopShell
+        {payload}
+        codex={codex}
+        session={activeSession}
+        {freeInput}
+        {busy}
+        {error}
+        on:choose={(event) => choose(event.detail)}
+        on:freeInputChange={(event) => (freeInput = event.detail)}
+        on:submitFreeInput={submitFreeInput}
+        on:rewind={(event) => rewind(event.detail)}
+      />
+    {:else}
+      <ReaderMobileShell
+        {payload}
+        codex={codex}
+        {freeInput}
+        {busy}
+        {error}
+        on:choose={(event) => choose(event.detail)}
+        on:freeInputChange={(event) => (freeInput = event.detail)}
+        on:submitFreeInput={submitFreeInput}
+        on:rewind={(event) => rewind(event.detail)}
+      />
+    {/if}
   {:else if phase === 'ending' && payload && activeSession && payload.session.ending_report}
     <EndingScreen ending={payload.session.ending_report} session={activeSession} on:rewind={(event) => rewind(event.detail)} />
   {/if}
