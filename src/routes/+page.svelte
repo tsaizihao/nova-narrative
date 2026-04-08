@@ -3,10 +3,8 @@
   import EndingScreen from '$lib/components/EndingScreen.svelte';
   import ImportScreen from '$lib/components/ImportScreen.svelte';
   import PhaseStepper from '$lib/components/PhaseStepper.svelte';
-  import ReaderStage from '$lib/components/ReaderStage.svelte';
+  import ReaderDesktopShell from '$lib/components/ReaderDesktopShell.svelte';
   import ReviewWorkspace from '$lib/components/ReviewWorkspace.svelte';
-  import StoryCodexPanel from '$lib/components/StoryCodexPanel.svelte';
-  import StoryStatePanel from '$lib/components/StoryStatePanel.svelte';
   import { api } from '$lib/api/client';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
   import type {
@@ -332,25 +330,18 @@
       />
     </div>
   {:else if phase === 'reader' && payload && activeSession}
-    <div class="reader-grid">
-      <ReaderStage
-        {payload}
-        {busy}
-        {error}
-        {freeInput}
-        on:choose={(event) => choose(event.detail)}
-        on:freeInputChange={(event) => (freeInput = event.detail)}
-        on:submitFreeInput={submitFreeInput}
-      />
-      <StoryCodexPanel
-        {codex}
-        session={activeSession}
-        activeLore={payload.active_lore}
-        activeRules={payload.active_rules}
-        on:rewind={(event) => rewind(event.detail)}
-      />
-      <StoryStatePanel storyState={payload.story_state} activeRules={payload.active_rules} />
-    </div>
+    <ReaderDesktopShell
+      {payload}
+      codex={codex}
+      session={activeSession}
+      {freeInput}
+      {busy}
+      {error}
+      on:choose={(event) => choose(event.detail)}
+      on:freeInputChange={(event) => (freeInput = event.detail)}
+      on:submitFreeInput={submitFreeInput}
+      on:rewind={(event) => rewind(event.detail)}
+    />
   {:else if phase === 'ending' && payload && activeSession && payload.session.ending_report}
     <EndingScreen ending={payload.session.ending_report} session={activeSession} on:rewind={(event) => rewind(event.detail)} />
   {/if}
@@ -459,8 +450,7 @@
     font-size: 0.68rem;
   }
 
-  .review-shell,
-  .reader-grid {
+  .review-shell {
     position: relative;
     z-index: 1;
     width: min(1440px, 100%);
@@ -516,17 +506,7 @@
     cursor: pointer;
   }
 
-  .reader-grid {
-    display: grid;
-    gap: 18px;
-    grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr) minmax(280px, 0.8fr);
-  }
-
   @media (max-width: 1200px) {
-    .reader-grid {
-      grid-template-columns: 1fr;
-    }
-
     .topbar {
       display: grid;
       grid-template-columns: 1fr;
