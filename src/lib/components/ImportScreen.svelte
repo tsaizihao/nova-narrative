@@ -1,6 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
+  import { readImportedTextFile } from '$lib/text-import';
+
   export let projectName = '';
   export let novelText = '';
   export let busy = false;
@@ -9,9 +11,33 @@
   const dispatch = createEventDispatcher<{
     submit: void;
     sample: void;
+    fileError: string;
+    fileLoaded: void;
     updateProjectName: string;
     updateNovelText: string;
   }>();
+
+  async function handleFileSelection(event: Event) {
+    const target = event.currentTarget as HTMLInputElement;
+    const file = target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const imported = await readImportedTextFile(file);
+      if (!projectName.trim()) {
+        dispatch('updateProjectName', imported.suggestedName);
+      }
+      dispatch('updateNovelText', imported.content);
+      dispatch('fileLoaded');
+    } catch (caught) {
+      dispatch('fileError', caught instanceof Error ? caught.message : '读取 txt 文件失败');
+    } finally {
+      target.value = '';
+    }
+  }
 </script>
 
 <section class="workspace-hero">
@@ -32,10 +58,18 @@
         <p class="label">新项目</p>
         <h2>导入小说文本</h2>
       </div>
-      <button type="button" class="ghost" on:click={() => dispatch('sample')} disabled={busy}>
-        载入示例
-      </button>
+      <div class="head-actions">
+        <label class="ghost file-trigger">
+          <input type="file" accept=".txt,text/plain" on:change={handleFileSelection} disabled={busy} />
+          <span>导入 .txt</span>
+        </label>
+        <button type="button" class="ghost" on:click={() => dispatch('sample')} disabled={busy}>
+          载入示例
+        </button>
+      </div>
     </div>
+
+    <p class="file-help">支持中文纯文本 `.txt`，读取成功后会直接填入下方文本框。</p>
 
     <label>
       <span>项目名称</span>
@@ -146,6 +180,14 @@
     gap: 16px;
   }
 
+  .head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
   label {
     display: grid;
     gap: 10px;
@@ -202,9 +244,31 @@
     color: #5f4f3e;
   }
 
+  .file-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .file-trigger input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
   .primary:hover,
   .ghost:hover {
     transform: translateY(-1px);
+  }
+
+  .file-help {
+    margin: -4px 0 4px;
+    color: rgba(62, 48, 36, 0.64);
+    font-size: 0.9rem;
   }
 
   .error {
@@ -220,6 +284,15 @@
     .copy,
     .composer {
       padding: 26px;
+    }
+
+    .section-head {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .head-actions {
+      justify-content: flex-start;
     }
   }
 </style>

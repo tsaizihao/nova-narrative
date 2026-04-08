@@ -325,6 +325,9 @@ export interface RuleEvaluationResult {
 export interface NovelProject {
   id: string;
   name: string;
+  created_at: string;
+  updated_at: string;
+  last_opened_at: string;
   raw_text: string;
   chapters: ChapterChunk[];
   build_status: BuildStatus;
@@ -332,6 +335,14 @@ export interface NovelProject {
   character_cards: CharacterCard[];
   worldbook_entries: WorldBookEntry[];
   rules: RuleDefinition[];
+}
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  build_status: BuildStatus;
+  has_story_package: boolean;
+  last_opened_at: string;
 }
 
 export interface StageCard {

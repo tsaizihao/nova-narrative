@@ -29,15 +29,11 @@
 
   let phase: Phase = 'import';
   let stepperPhase: StepperPhase = 'import';
-  let projectName = SAMPLE_PROJECT_NAME;
-  let novelText = SAMPLE_NOVEL;
+  let projectName = '';
+  let novelText = '';
   let project: NovelProject | null = null;
   let readerLayoutMode: ReaderLayoutMode = 'desktop';
-  let buildStatus: BuildStatus = {
-    stage: 'created',
-    message: '等待新的故事',
-    progress: 0
-  };
+  let buildStatus = createIdleBuildStatus();
   let payload: ScenePayload | null = null;
   let codex: StoryCodex | null = null;
   let activeSession: SessionState | null = null;
@@ -51,12 +47,51 @@
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
   const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
 
+  function createIdleBuildStatus(): BuildStatus {
+    return {
+      stage: 'created',
+      message: '等待导入中文小说',
+      progress: 0
+    };
+  }
+
+  function clearRuntimeState() {
+    payload = null;
+    codex = null;
+    activeSession = null;
+    reviewSceneId = '';
+    lorePreview = [];
+    rulePreview = null;
+    freeInput = '';
+  }
+
+  function openImportDraft(name: string, text: string, clearProject = false) {
+    if (clearProject) {
+      project = null;
+    }
+    clearRuntimeState();
+    phase = 'import';
+    buildStatus = createIdleBuildStatus();
+    projectName = name;
+    novelText = text;
+  }
+
+  function startFreshProject() {
+    error = '';
+    openImportDraft('', '', true);
+  }
+
+  function reopenImportDraft() {
+    error = '';
+    openImportDraft(project?.name ?? projectName, project?.raw_text ?? novelText);
+  }
+
   async function refreshCodex(sessionId: string) {
     codex = await api.getStoryCodex(sessionId);
   }
 
-  async function refreshReviewData(projectId: string) {
-    project = await api.getProject(projectId);
+  async function refreshReviewData(projectId: string, existingProject?: NovelProject) {
+    project = existingProject ?? (await api.getProject(projectId));
     reviewSceneId = project.story_package?.start_scene_id ?? '';
     if (!reviewSceneId) {
       lorePreview = [];
@@ -73,6 +108,36 @@
       undefined,
       '午夜去开门'
     );
+  }
+
+  async function restoreRecentProject() {
+    busy = true;
+    error = '';
+
+    try {
+      const recentProject = await api.getRecentProject();
+      if (!recentProject) {
+        openImportDraft('', '', true);
+        return;
+      }
+
+      const restoredProject = await api.getProject(recentProject.id);
+      project = restoredProject;
+
+      if (recentProject.has_story_package && restoredProject.story_package) {
+        buildStatus = restoredProject.build_status;
+        await refreshReviewData(restoredProject.id, restoredProject);
+        phase = 'review';
+        return;
+      }
+
+      openImportDraft(restoredProject.name, restoredProject.raw_text);
+    } catch (caught) {
+      openImportDraft('', '', true);
+      error = caught instanceof Error ? `恢复最近项目失败：${caught.message}` : '恢复最近项目失败，已回到空白导入页';
+    } finally {
+      busy = false;
+    }
   }
 
   async function initializeStory() {
@@ -274,6 +339,16 @@
     error = '';
   }
 
+  function updateProjectName(value: string) {
+    projectName = value;
+    error = '';
+  }
+
+  function updateNovelText(value: string) {
+    novelText = value;
+    error = '';
+  }
+
   $: stepperPhase = phase === 'ending' ? 'reader' : phase;
 
   onMount(() => {
@@ -282,6 +357,7 @@
     };
 
     updateReaderLayout();
+    void restoreRecentProject();
     window.addEventListener('resize', updateReaderLayout);
 
     return () => window.removeEventListener('resize', updateReaderLayout);
@@ -289,7 +365,7 @@
 </script>
 
 <svelte:head>
-  <title>Nova Narrative</title>
+  <title>叙世者</title>
 </svelte:head>
 
 <div class="page-shell">
@@ -297,12 +373,25 @@
   <div class="page-glow page-glow-right"></div>
 
   <header class="topbar">
-    <div>
-      <p>Nova Narrative</p>
-      <strong>小说改编工作台</strong>
+    <div class="brand">
+      <p>叙世者</p>
+      <strong>“叙述世界的人” AI 帮你搭台</strong>
     </div>
     <div class="topbar-meta">
-      <span>{project?.name ?? '单本项目制'}</span>
+      <div class="topbar-actions">
+        <button type="button" class="topbar-button" on:click={startFreshProject} disabled={busy}>
+          新建项目
+        </button>
+        <button
+          type="button"
+          class="topbar-button topbar-button-secondary"
+          on:click={reopenImportDraft}
+          disabled={busy || (!project && !projectName && !novelText)}
+        >
+          重新导入
+        </button>
+      </div>
+      <span>{project?.name ?? 'macOS 内部 Alpha'}</span>
       <PhaseStepper phase={stepperPhase} labels={phaseLabels} />
     </div>
   </header>
@@ -315,8 +404,10 @@
       {error}
       on:submit={initializeStory}
       on:sample={fillSample}
-      on:updateProjectName={(event) => (projectName = event.detail)}
-      on:updateNovelText={(event) => (novelText = event.detail)}
+      on:fileLoaded={() => (error = '')}
+      on:fileError={(event) => (error = event.detail)}
+      on:updateProjectName={(event) => updateProjectName(event.detail)}
+      on:updateNovelText={(event) => updateNovelText(event.detail)}
     />
   {:else if phase === 'building'}
     <BuildProgressScreen projectName={project?.name ?? projectName} {buildStatus} />
@@ -441,6 +532,11 @@
     backdrop-filter: blur(14px);
   }
 
+  .brand {
+    display: grid;
+    gap: 4px;
+  }
+
   .topbar p,
   .topbar strong,
   .topbar span {
@@ -448,28 +544,56 @@
   }
 
   .topbar p {
-    font-size: 0.72rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
+    font-size: 0.92rem;
+    letter-spacing: 0.16em;
     color: #91765d;
   }
 
   .topbar strong {
     display: block;
-    margin-top: 5px;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: 1.35rem;
+    font-size: 1.2rem;
   }
 
   .topbar-meta {
     display: grid;
     justify-items: end;
+    gap: 12px;
+  }
+
+  .topbar-actions {
+    display: flex;
     gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .topbar span {
     color: rgba(63, 47, 35, 0.64);
     font-size: 0.9rem;
+  }
+
+  .topbar-button {
+    min-height: 40px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 999px;
+    background: #1f6a57;
+    color: #f6f3eb;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .topbar-button-secondary {
+    background: rgba(121, 103, 81, 0.1);
+    color: #5f4f3e;
+    font-weight: 600;
+  }
+
+  .topbar-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .eyebrow {
@@ -545,6 +669,10 @@
 
     .topbar-meta {
       justify-items: start;
+    }
+
+    .topbar-actions {
+      justify-content: flex-start;
     }
   }
 

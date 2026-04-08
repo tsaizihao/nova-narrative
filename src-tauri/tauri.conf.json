@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Nova Narrative",
+  "productName": "叙世者",
   "version": "0.1.0",
   "identifier": "com.nova.narrative",
   "build": {
@@ -16,7 +16,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Nova Narrative",
+        "title": "叙世者",
         "width": 1440,
         "height": 920,
         "minWidth": 1080,
@@ -26,7 +26,7 @@
     ]
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

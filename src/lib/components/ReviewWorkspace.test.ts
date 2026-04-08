@@ -7,6 +7,9 @@ import type { NovelProject, RuleEvaluationResult, StoryState } from '$lib/types'
 const project: NovelProject = {
   id: 'project-1',
   name: '北门夜话',
+  created_at: '2026-04-08T00:00:00.000Z',
+  updated_at: '2026-04-08T00:00:00.000Z',
+  last_opened_at: '2026-04-08T00:00:00.000Z',
   raw_text: '原文',
   chapters: [],
   build_status: {

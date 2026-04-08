@@ -6,6 +6,7 @@ import type {
   BuildStatus,
   EndingReport,
   NovelProject,
+  ProjectSummary,
   RuleDefinition,
   RuleEvaluationResult,
   ScenePayload,
@@ -34,6 +35,10 @@ async function desktopInvoke<T>(command: string, args?: Record<string, unknown>)
       return mockBackend.get_build_status(args?.projectId as string) as Promise<T>;
     case 'load_story_package':
       return mockBackend.load_story_package(args?.projectId as string) as Promise<T>;
+    case 'list_projects':
+      return mockBackend.list_projects() as Promise<T>;
+    case 'get_recent_project':
+      return mockBackend.get_recent_project() as Promise<T>;
     case 'get_project':
       return mockBackend.get_project(args?.projectId as string) as Promise<T>;
     case 'start_session':
@@ -107,6 +112,12 @@ export const api = {
   },
   loadStoryPackage(projectId: string) {
     return desktopInvoke<StoryPackage>('load_story_package', { projectId });
+  },
+  listProjects() {
+    return desktopInvoke<ProjectSummary[]>('list_projects');
+  },
+  getRecentProject() {
+    return desktopInvoke<ProjectSummary | null>('get_recent_project');
   },
   getProject(projectId: string) {
     return desktopInvoke<NovelProject>('get_project', { projectId });

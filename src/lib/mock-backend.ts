@@ -7,6 +7,7 @@ import type {
   CoreConflict,
   LoreLifecycleRecord,
   NovelProject,
+  ProjectSummary,
   RuleDefinition,
   RuleEvaluationResult,
   SceneNode,
@@ -23,6 +24,7 @@ const projects = new Map<string, NovelProject>();
 const packages = new Map<string, StoryPackage>();
 const sessions = new Map<string, SessionState>();
 let counter = 0;
+let timestampCounter = 0;
 
 function nextId(prefix: string) {
   counter += 1;
@@ -33,6 +35,11 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function nextTimestamp() {
+  timestampCounter += 1;
+  return new Date(Date.UTC(2026, 3, 8, 0, 0, timestampCounter)).toISOString();
+}
+
 function splitChapterLines(text: string) {
   return text
     .split(/\n+/)
@@ -41,9 +48,13 @@ function splitChapterLines(text: string) {
 }
 
 function buildProject(name: string): NovelProject {
+  const timestamp = nextTimestamp();
   return {
     id: nextId('project'),
     name,
+    created_at: timestamp,
+    updated_at: timestamp,
+    last_opened_at: timestamp,
     raw_text: '',
     chapters: [],
     build_status: {
@@ -55,6 +66,32 @@ function buildProject(name: string): NovelProject {
     worldbook_entries: [],
     rules: [],
     story_package: null
+  };
+}
+
+function touchProjectOpened(project: NovelProject): NovelProject {
+  return {
+    ...project,
+    last_opened_at: nextTimestamp()
+  };
+}
+
+function touchProjectMutated(project: NovelProject): NovelProject {
+  const timestamp = nextTimestamp();
+  return {
+    ...project,
+    updated_at: timestamp,
+    last_opened_at: timestamp
+  };
+}
+
+function buildProjectSummary(project: NovelProject): ProjectSummary {
+  return {
+    id: project.id,
+    name: project.name,
+    build_status: clone(project.build_status),
+    has_story_package: Boolean(project.story_package),
+    last_opened_at: project.last_opened_at
   };
 }
 
@@ -746,7 +783,7 @@ function buildPayload(session: SessionState, storyPackage: StoryPackage): SceneP
 
 function rebuildProject(project: NovelProject): NovelProject {
   const storyPackage = buildStoryPackage(project);
-  const updated: NovelProject = {
+  const updated = touchProjectMutated({
     ...project,
     story_package: storyPackage,
     build_status: {
@@ -754,13 +791,23 @@ function rebuildProject(project: NovelProject): NovelProject {
       message: 'Story package ready',
       progress: 100
     }
-  };
+  });
   packages.set(project.id, storyPackage);
   projects.set(project.id, updated);
   return updated;
 }
 
 export const mockBackend = {
+  async list_projects() {
+    return Array.from(projects.values())
+      .map((project) => buildProjectSummary(project))
+      .sort((left, right) => right.last_opened_at.localeCompare(left.last_opened_at));
+  },
+
+  async get_recent_project() {
+    return (await this.list_projects())[0] ?? null;
+  },
+
   async create_project(name: string) {
     const project = buildProject(name);
     projects.set(project.id, project);
@@ -803,9 +850,11 @@ export const mockBackend = {
       worldbook_entries: [],
       rules: []
     };
+    const updated = touchProjectMutated(imported);
 
-    projects.set(projectId, imported);
-    return clone(imported);
+    packages.delete(projectId);
+    projects.set(projectId, updated);
+    return clone(updated);
   },
 
   async build_story_package(projectId: string) {
@@ -815,14 +864,13 @@ export const mockBackend = {
     const character_cards = buildCharacters();
     const rules = buildRules();
     const worldbook_entries = buildWorldBook(character_cards, rules);
-    const readyProject: NovelProject = rebuildProject({
+    rebuildProject({
       ...project,
       character_cards,
       worldbook_entries,
       rules
     });
-
-    return clone(readyProject.build_status as BuildStatus);
+    return clone(projects.get(projectId)?.build_status as BuildStatus);
   },
 
   async get_build_status(projectId: string) {
@@ -840,12 +888,17 @@ export const mockBackend = {
   async get_project(projectId: string) {
     const project = projects.get(projectId);
     if (!project) throw new Error('project not found');
-    return clone(project);
+    const updated = touchProjectOpened(project);
+    projects.set(projectId, updated);
+    return clone(updated);
   },
 
   async start_session(projectId: string) {
+    const project = projects.get(projectId);
+    if (!project) throw new Error('project not found');
     const storyPackage = packages.get(projectId);
     if (!storyPackage) throw new Error('story package not found');
+    projects.set(projectId, touchProjectOpened(project));
 
     let session: SessionState = {
       session_id: nextId('session'),

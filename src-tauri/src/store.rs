@@ -1,12 +1,10 @@
 use std::{
     collections::HashMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
 };
-
-#[cfg(test)]
-use std::path::Path;
 
 use uuid::Uuid;
 
@@ -16,8 +14,8 @@ use crate::{
     error::{AppError, AppResult},
     importer::{sanitize_text, split_novel_into_chapters},
     models::{
-        BuildStage, BuildStatus, CharacterCard, NovelProject, ScenePayload, SessionState,
-        StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
+        BuildStage, BuildStatus, CharacterCard, NovelProject, ProjectSummary, ScenePayload,
+        SessionState, StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
     },
     provider::{HeuristicStoryProvider, StoryAiProvider},
     rules::RuleDefinition,
@@ -41,12 +39,14 @@ impl ProjectStore {
         fs::create_dir_all(base_dir.join("projects"))?;
         fs::create_dir_all(base_dir.join("sessions"))?;
 
-        Ok(Self {
+        let mut store = Self {
             base_dir,
             provider,
             projects: HashMap::new(),
             sessions: HashMap::new(),
-        })
+        };
+        store.load_from_disk()?;
+        Ok(store)
     }
 
     #[cfg(test)]
@@ -57,9 +57,13 @@ impl ProjectStore {
     }
 
     pub fn create_project(&mut self, name: &str) -> AppResult<NovelProject> {
+        let created_at = timestamp_token();
         let project = NovelProject {
             id: Uuid::new_v4().to_string(),
             name: name.to_string(),
+            created_at: created_at.clone(),
+            updated_at: created_at.clone(),
+            last_opened_at: created_at,
             build_status: BuildStatus {
                 stage: BuildStage::Created,
                 message: "Project created".into(),
@@ -90,6 +94,7 @@ impl ProjectStore {
             progress: 20,
             error: None,
         };
+        touch_project_mutated(project);
 
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
@@ -126,6 +131,7 @@ impl ProjectStore {
             progress: 100,
             error: None,
         };
+        touch_project_mutated(project);
 
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
@@ -146,15 +152,39 @@ impl ProjectStore {
             .ok_or_else(|| AppError::NotFound(project_id.to_string()))
     }
 
-    pub fn get_project(&self, project_id: &str) -> AppResult<NovelProject> {
-        self.projects
-            .get(project_id)
-            .cloned()
-            .ok_or_else(|| AppError::NotFound(project_id.to_string()))
+    pub fn list_projects(&self) -> AppResult<Vec<ProjectSummary>> {
+        let mut projects = self
+            .projects
+            .values()
+            .map(project_summary_from_project)
+            .collect::<Vec<_>>();
+        projects.sort_by(|left, right| {
+            right
+                .last_opened_at
+                .cmp(&left.last_opened_at)
+                .then_with(|| left.name.cmp(&right.name))
+        });
+        Ok(projects)
+    }
+
+    pub fn get_recent_project(&self) -> AppResult<Option<ProjectSummary>> {
+        Ok(self.list_projects()?.into_iter().next())
+    }
+
+    pub fn get_project(&mut self, project_id: &str) -> AppResult<NovelProject> {
+        let project = self
+            .projects
+            .get_mut(project_id)
+            .ok_or_else(|| AppError::NotFound(project_id.to_string()))?;
+        touch_project_opened(project);
+        let snapshot = project.clone();
+        self.persist_project(&snapshot)?;
+        Ok(snapshot)
     }
 
     pub fn start_session(&mut self, project_id: &str) -> AppResult<SessionState> {
         let package = self.load_story_package(project_id)?;
+        self.touch_project_opened(project_id)?;
         let session = RuntimeEngine::start_session(project_id, &package)?;
         self.persist_session(&session)?;
         self.sessions.insert(session.session_id.clone(), session.clone());
@@ -238,6 +268,7 @@ impl ProjectStore {
         };
         *existing = card;
         rebuild_story_package_from_project(project);
+        touch_project_mutated(project);
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
         Ok(snapshot.character_cards)
@@ -262,6 +293,7 @@ impl ProjectStore {
             project.worldbook_entries.push(entry);
         }
         rebuild_story_package_from_project(project);
+        touch_project_mutated(project);
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
         Ok(snapshot.worldbook_entries)
@@ -278,6 +310,7 @@ impl ProjectStore {
             .ok_or_else(|| AppError::NotFound(project_id.to_string()))?;
         project.worldbook_entries.retain(|entry| entry.id != entry_id);
         rebuild_story_package_from_project(project);
+        touch_project_mutated(project);
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
         Ok(snapshot.worldbook_entries)
@@ -294,6 +327,7 @@ impl ProjectStore {
             project.rules.push(rule);
         }
         rebuild_story_package_from_project(project);
+        touch_project_mutated(project);
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
         Ok(snapshot.rules)
@@ -306,6 +340,7 @@ impl ProjectStore {
             .ok_or_else(|| AppError::NotFound(project_id.to_string()))?;
         project.rules.retain(|rule| rule.id != rule_id);
         rebuild_story_package_from_project(project);
+        touch_project_mutated(project);
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
         Ok(snapshot.rules)
@@ -409,10 +444,29 @@ impl ProjectStore {
         Ok(())
     }
 
-    #[cfg(test)]
     fn load_from_disk(&mut self) -> AppResult<()> {
         self.projects = load_objects::<NovelProject>(&self.base_dir.join("projects"))?;
         self.sessions = load_objects::<SessionState>(&self.base_dir.join("sessions"))?;
+        let mut repaired_projects = Vec::new();
+        for project in self.projects.values_mut() {
+            if ensure_project_metadata(project) {
+                repaired_projects.push(project.clone());
+            }
+        }
+        for project in repaired_projects {
+            self.persist_project(&project)?;
+        }
+        Ok(())
+    }
+
+    fn touch_project_opened(&mut self, project_id: &str) -> AppResult<()> {
+        let project = self
+            .projects
+            .get_mut(project_id)
+            .ok_or_else(|| AppError::NotFound(project_id.to_string()))?;
+        touch_project_opened(project);
+        let snapshot = project.clone();
+        self.persist_project(&snapshot)?;
         Ok(())
     }
 }
@@ -478,7 +532,6 @@ fn story_bible_snapshot(project: &NovelProject) -> StoryBible {
     }
 }
 
-#[cfg(test)]
 fn load_objects<T>(dir: &Path) -> AppResult<HashMap<String, T>>
 where
     T: serde::de::DeserializeOwned + Clone,
@@ -500,9 +553,79 @@ where
     Ok(objects)
 }
 
+fn timestamp_token() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{nanos:020}")
+}
+
+fn project_summary_from_project(project: &NovelProject) -> ProjectSummary {
+    ProjectSummary {
+        id: project.id.clone(),
+        name: project.name.clone(),
+        build_status: project.build_status.clone(),
+        has_story_package: project.story_package.is_some(),
+        last_opened_at: project.last_opened_at.clone(),
+    }
+}
+
+fn ensure_project_metadata(project: &mut NovelProject) -> bool {
+    let fallback = project
+        .created_at
+        .chars()
+        .next()
+        .map(|_| project.created_at.clone())
+        .or_else(|| {
+            project
+                .updated_at
+                .chars()
+                .next()
+                .map(|_| project.updated_at.clone())
+        })
+        .or_else(|| {
+            project
+                .last_opened_at
+                .chars()
+                .next()
+                .map(|_| project.last_opened_at.clone())
+        })
+        .unwrap_or_else(timestamp_token);
+
+    let mut changed = false;
+    if project.created_at.is_empty() {
+        project.created_at = fallback.clone();
+        changed = true;
+    }
+    if project.updated_at.is_empty() {
+        project.updated_at = project.created_at.clone();
+        changed = true;
+    }
+    if project.last_opened_at.is_empty() {
+        project.last_opened_at = project.updated_at.clone();
+        changed = true;
+    }
+    changed
+}
+
+fn touch_project_mutated(project: &mut NovelProject) {
+    ensure_project_metadata(project);
+    let timestamp = timestamp_token();
+    project.updated_at = timestamp.clone();
+    project.last_opened_at = timestamp;
+}
+
+fn touch_project_opened(project: &mut NovelProject) {
+    ensure_project_metadata(project);
+    project.last_opened_at = timestamp_token();
+}
+
 #[cfg(test)]
 mod tests {
     use super::ProjectStore;
+    use std::fs;
+
     use crate::importer::split_novel_into_chapters;
     use crate::worldbook::WorldBookInsertionMode;
 
@@ -747,5 +870,101 @@ mod tests {
         let payload = store.get_current_scene(&session_id).expect("scene after reload");
         assert!(!payload.scene.title.is_empty());
         assert!(!payload.story_state.current_scene_id.is_empty());
+    }
+
+    #[test]
+    fn recent_project_summary_prefers_most_recently_opened_project() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let first = store.create_project("第一个项目").expect("first project");
+        let second = store.create_project("第二个项目").expect("second project");
+
+        store
+            .import_novel_text(&first.id, &sample_novel())
+            .expect("import first");
+        store.build_story_package(&first.id).expect("build first");
+        store.get_project(&first.id).expect("open first");
+
+        let recent = store.get_recent_project().expect("recent project");
+        assert_eq!(recent.expect("existing recent project").id, first.id);
+
+        let projects = store.list_projects().expect("project list");
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].id, first.id);
+        assert!(projects[0].has_story_package);
+        assert_eq!(projects[1].id, second.id);
+        assert!(!projects[1].has_story_package);
+    }
+
+    #[test]
+    fn project_timestamps_survive_reload_and_track_last_opened_at() {
+        let dir = tempfile::tempdir().expect("temp dir");
+
+        let project_id = {
+            let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+            let project = store.create_project("临川夜话").expect("project");
+            assert!(!project.created_at.is_empty());
+            assert_eq!(project.created_at, project.updated_at);
+            assert_eq!(project.last_opened_at, project.updated_at);
+
+            let imported = store
+                .import_novel_text(&project.id, &sample_novel())
+                .expect("import");
+            assert!(imported.updated_at >= project.updated_at);
+            assert_eq!(imported.last_opened_at, imported.updated_at);
+
+            let build_status = store.build_story_package(&project.id).expect("build");
+            assert!(matches!(build_status.stage, crate::models::BuildStage::Ready));
+
+            let refreshed = store.get_project(&project.id).expect("refresh timestamps");
+            assert!(refreshed.last_opened_at >= imported.last_opened_at);
+
+            project.id
+        };
+
+        let mut reloaded = ProjectStore::reload(dir.path().to_path_buf()).expect("reload");
+        let project = reloaded.get_project(&project_id).expect("project after reload");
+        assert!(!project.created_at.is_empty());
+        assert!(!project.updated_at.is_empty());
+        assert!(!project.last_opened_at.is_empty());
+    }
+
+    #[test]
+    fn reload_backfills_missing_project_metadata_from_legacy_snapshot() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let projects_dir = dir.path().join("projects");
+        let sessions_dir = dir.path().join("sessions");
+        fs::create_dir_all(&projects_dir).expect("projects dir");
+        fs::create_dir_all(&sessions_dir).expect("sessions dir");
+
+        let legacy_project = serde_json::json!({
+            "id": "legacy-project",
+            "name": "旧项目",
+            "raw_text": "第1章 旧雨",
+            "chapters": [],
+            "build_status": {
+                "stage": "imported",
+                "message": "Novel imported",
+                "progress": 20,
+                "error": null
+            },
+            "story_package": null,
+            "character_cards": [],
+            "worldbook_entries": [],
+            "rules": []
+        });
+        fs::write(
+            projects_dir.join("legacy-project.json"),
+            serde_json::to_string_pretty(&legacy_project).expect("serialize legacy project"),
+        )
+        .expect("write legacy project");
+
+        let mut store = ProjectStore::reload(dir.path().to_path_buf()).expect("reload");
+        let project = store.get_project("legacy-project").expect("legacy project");
+
+        assert!(!project.created_at.is_empty());
+        assert!(!project.updated_at.is_empty());
+        assert!(!project.last_opened_at.is_empty());
     }
 }

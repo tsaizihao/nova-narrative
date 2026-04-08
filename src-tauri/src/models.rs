@@ -21,6 +21,7 @@ pub enum BuildStage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct BuildStatus {
     pub stage: BuildStage,
     pub message: String,
@@ -29,6 +30,7 @@ pub struct BuildStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ChapterChunk {
     pub id: String,
     pub order: usize,
@@ -38,9 +40,13 @@ pub struct ChapterChunk {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct NovelProject {
     pub id: String,
     pub name: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_opened_at: String,
     pub raw_text: String,
     pub chapters: Vec<ChapterChunk>,
     pub build_status: BuildStatus,
@@ -51,6 +57,17 @@ pub struct NovelProject {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ProjectSummary {
+    pub id: String,
+    pub name: String,
+    pub build_status: BuildStatus,
+    pub has_story_package: bool,
+    pub last_opened_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct CharacterCard {
     pub id: String,
     pub name: String,
@@ -68,6 +85,7 @@ pub struct CharacterCard {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct LocationCard {
     pub id: String,
     pub name: String,
@@ -75,6 +93,7 @@ pub struct LocationCard {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct TimelineEntry {
     pub id: String,
     pub label: String,
@@ -83,12 +102,14 @@ pub struct TimelineEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct WorldRule {
     pub id: String,
     pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct RelationshipEdge {
     pub source: String,
     pub target: String,
@@ -97,6 +118,7 @@ pub struct RelationshipEdge {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct CoreConflict {
     pub id: String,
     pub title: String,
@@ -104,6 +126,7 @@ pub struct CoreConflict {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct StoryBible {
     pub title: String,
     pub characters: Vec<CharacterCard>,
@@ -115,6 +138,7 @@ pub struct StoryBible {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct WorldModelSnapshot {
     pub character_cards: Vec<CharacterCard>,
     pub worldbook_entries: Vec<WorldBookEntry>,
@@ -122,6 +146,7 @@ pub struct WorldModelSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct DialogueLine {
     pub speaker: String,
     pub text: String,
@@ -129,6 +154,7 @@ pub struct DialogueLine {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct StateEffect {
     pub key: String,
     pub delta: i32,
@@ -136,6 +162,7 @@ pub struct StateEffect {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ChoiceOption {
     pub id: String,
     pub label: String,
@@ -146,6 +173,7 @@ pub struct ChoiceOption {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct EndingReport {
     pub ending_type: String,
     pub summary: String,
@@ -154,6 +182,7 @@ pub struct EndingReport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct SceneNode {
     pub id: String,
     pub chapter: usize,
@@ -171,6 +200,7 @@ pub struct SceneNode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct StoryPackage {
     pub story_bible: StoryBible,
     pub world_model: WorldModelSnapshot,
@@ -179,6 +209,7 @@ pub struct StoryPackage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct CheckpointMarker {
     pub id: String,
     pub label: String,
@@ -186,6 +217,7 @@ pub struct CheckpointMarker {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct CheckpointSnapshot {
     pub checkpoint: CheckpointMarker,
     pub current_scene_id: String,
@@ -200,6 +232,7 @@ pub struct CheckpointSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct SessionState {
     pub session_id: String,
     pub project_id: String,
@@ -218,6 +251,7 @@ pub struct SessionState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct StoryCodex {
     pub characters: Vec<CharacterCard>,
     pub locations: Vec<LocationCard>,
@@ -230,6 +264,7 @@ pub struct StoryCodex {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ScenePayload {
     pub scene: SceneNode,
     pub session: SessionState,

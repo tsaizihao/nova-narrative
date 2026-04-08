@@ -17,7 +17,10 @@ use tauri::{Manager, State};
 
 use crate::{
     error::AppResult,
-    models::{BuildStatus, EndingReport, NovelProject, ScenePayload, SessionState, StoryCodex, StoryPackage},
+    models::{
+        BuildStatus, EndingReport, NovelProject, ProjectSummary, ScenePayload, SessionState,
+        StoryCodex, StoryPackage,
+    },
     rules::RuleDefinition,
     store::ProjectStore,
     worldbook::WorldBookEntry,
@@ -52,6 +55,16 @@ fn get_build_status(state: State<'_, StoreState>, project_id: String) -> Result<
 #[tauri::command]
 fn load_story_package(state: State<'_, StoreState>, project_id: String) -> Result<StoryPackage, String> {
     with_store(state, move |store| store.load_story_package(&project_id))
+}
+
+#[tauri::command]
+fn list_projects(state: State<'_, StoreState>) -> Result<Vec<ProjectSummary>, String> {
+    with_store(state, |store| store.list_projects())
+}
+
+#[tauri::command]
+fn get_recent_project(state: State<'_, StoreState>) -> Result<Option<ProjectSummary>, String> {
+    with_store(state, |store| store.get_recent_project())
 }
 
 #[tauri::command]
@@ -211,6 +224,8 @@ pub fn run() {
             build_story_package,
             get_build_status,
             load_story_package,
+            list_projects,
+            get_recent_project,
             get_project,
             start_session,
             get_current_scene,
