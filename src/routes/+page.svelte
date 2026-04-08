@@ -1,15 +1,12 @@
 <script lang="ts">
   import BuildProgressScreen from '$lib/components/BuildProgressScreen.svelte';
-  import CharacterReviewPanel from '$lib/components/CharacterReviewPanel.svelte';
   import EndingScreen from '$lib/components/EndingScreen.svelte';
   import ImportScreen from '$lib/components/ImportScreen.svelte';
   import PhaseStepper from '$lib/components/PhaseStepper.svelte';
   import ReaderStage from '$lib/components/ReaderStage.svelte';
-  import RuleBookPanel from '$lib/components/RuleBookPanel.svelte';
+  import ReviewWorkspace from '$lib/components/ReviewWorkspace.svelte';
   import StoryCodexPanel from '$lib/components/StoryCodexPanel.svelte';
   import StoryStatePanel from '$lib/components/StoryStatePanel.svelte';
-  import WorldBookPanel from '$lib/components/WorldBookPanel.svelte';
-  import { loreLifecycleTone, loreSlotLabel, ruleBadgeTone } from '$lib/rule-helpers';
   import { api } from '$lib/api/client';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
   import type {
@@ -322,50 +319,17 @@
         </div>
         <button type="button" on:click={enterStory} disabled={busy}>进入互动故事</button>
       </section>
-
-      <div class="preview-grid">
-        <article>
-          <strong>lore 预览</strong>
-          <div class="preview-list">
-            {#each lorePreview as lore}
-              <div class="preview-item">
-                <p>{lore.title}</p>
-                <span class={`tone-${loreLifecycleTone(lore.lifecycle_state)}`}>
-                  {loreSlotLabel(lore.slot)} · {lore.reason}
-                </span>
-              </div>
-            {/each}
-          </div>
-        </article>
-        <article>
-          <strong>规则预览</strong>
-          <div class="preview-list">
-            {#if rulePreview}
-              {#each rulePreview.active_rules as rule}
-                <div class="preview-item">
-                  <p>{rule.name}</p>
-                  <span class={`tone-${ruleBadgeTone(rule.priority)}`}>{rule.explanation}</span>
-                </div>
-              {/each}
-              <p class="subtle">
-                预测状态：{rulePreview.story_state.possibility_flags.length
-                  ? rulePreview.story_state.possibility_flags.join(' / ')
-                  : rulePreview.story_state.event_flags.join(' / ') || '暂无变化'}
-              </p>
-            {/if}
-          </div>
-        </article>
-      </div>
-
-      {#if error}
-        <p class="error review-error">{error}</p>
-      {/if}
-
-      <div class="review-grid">
-        <CharacterReviewPanel cards={project.character_cards} on:save={saveCharacter} />
-        <WorldBookPanel entries={project.worldbook_entries} on:save={saveWorldBook} on:remove={deleteWorldBook} />
-        <RuleBookPanel rules={project.rules} on:save={saveRule} on:remove={deleteRule} />
-      </div>
+      <ReviewWorkspace
+        {project}
+        {lorePreview}
+        {rulePreview}
+        {error}
+        on:saveCharacter={saveCharacter}
+        on:saveWorldBook={saveWorldBook}
+        on:deleteWorldBook={deleteWorldBook}
+        on:saveRule={saveRule}
+        on:deleteRule={deleteRule}
+      />
     </div>
   {:else if phase === 'reader' && payload && activeSession}
     <div class="reader-grid">
@@ -508,12 +472,12 @@
     gap: 18px;
   }
 
-  .review-hero,
-  .preview-grid article {
+  .review-hero {
     padding: 24px;
     border-radius: 24px;
-    border: 1px solid rgba(255, 243, 214, 0.1);
-    background: rgba(14, 11, 9, 0.82);
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(248, 243, 234, 0.94);
+    box-shadow: 0 14px 28px rgba(65, 49, 35, 0.06);
   }
 
   .review-hero {
@@ -524,13 +488,12 @@
   }
 
   .review-hero h2,
-  .review-hero p,
-  .preview-grid p,
-  .preview-grid strong {
+  .review-hero p {
     margin: 0;
   }
 
   .review-hero h2 {
+    color: #2f261d;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
     font-size: clamp(2rem, 4vw, 3rem);
   }
@@ -539,7 +502,7 @@
     margin-top: 12px;
     max-width: 760px;
     line-height: 1.7;
-    color: rgba(255, 243, 214, 0.76);
+    color: rgba(63, 47, 35, 0.74);
   }
 
   .review-hero button {
@@ -547,47 +510,10 @@
     min-height: 48px;
     padding: 0 18px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 227, 170, 0.22);
-    background: linear-gradient(135deg, rgba(204, 150, 70, 0.22), rgba(255, 229, 178, 0.12));
-    color: #fff4dd;
+    border: none;
+    background: #1f6a57;
+    color: #f6f3eb;
     cursor: pointer;
-  }
-
-  .preview-grid,
-  .review-grid {
-    display: grid;
-    gap: 18px;
-  }
-
-  .preview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .review-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .preview-list {
-    margin-top: 14px;
-    display: grid;
-    gap: 12px;
-  }
-
-  .preview-item {
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: rgba(28, 20, 15, 0.88);
-    border: 1px solid rgba(255, 238, 207, 0.06);
-  }
-
-  .preview-item p {
-    margin: 0 0 6px;
-  }
-
-  .preview-item span,
-  .subtle {
-    color: rgba(255, 243, 214, 0.7);
-    font-size: 0.82rem;
   }
 
   .reader-grid {
@@ -596,30 +522,7 @@
     grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr) minmax(280px, 0.8fr);
   }
 
-  .review-error,
-  .error {
-    color: #ffb7a5;
-  }
-
-  .tone-danger {
-    color: #ffb7a5;
-  }
-
-  .tone-warning {
-    color: #f4cf90;
-  }
-
-  .tone-accent,
-  .tone-success {
-    color: #bfe5db;
-  }
-
-  .tone-muted {
-    color: rgba(255, 243, 214, 0.6);
-  }
-
   @media (max-width: 1200px) {
-    .review-grid,
     .reader-grid {
       grid-template-columns: 1fr;
     }
@@ -638,10 +541,6 @@
   @media (max-width: 900px) {
     .page-shell {
       padding: 18px;
-    }
-
-    .preview-grid {
-      grid-template-columns: 1fr;
     }
 
     .review-hero {
