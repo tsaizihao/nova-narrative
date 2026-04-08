@@ -10,6 +10,7 @@
 
   let drafts: WorldBookEntry[] = [];
   let previousEntries: WorldBookEntry[] = [];
+  let activeIndex = 0;
 
   function cloneEntry(entry: WorldBookEntry): WorldBookEntry {
     return JSON.parse(JSON.stringify(entry)) as WorldBookEntry;
@@ -18,6 +19,7 @@
   $: if (entries !== previousEntries) {
     drafts = entries.map(cloneEntry);
     previousEntries = entries;
+    activeIndex = Math.min(activeIndex, Math.max(entries.length - 1, 0));
   }
 </script>
 
@@ -30,17 +32,30 @@
     <p>{entries.length} 条 lore</p>
   </div>
 
-  <div class="list">
-    {#each drafts as entry, index}
-      <article>
+  {#if drafts.length}
+    <div class="workspace">
+      <div class="entity-list">
+        {#each drafts as entry, index}
+          <button
+            type="button"
+            class:active={index === activeIndex}
+            on:click={() => (activeIndex = index)}
+          >
+            <strong>{entry.title}</strong>
+            <span>{loreSlotLabel(entry.insertion_mode)}</span>
+          </button>
+        {/each}
+      </div>
+
+      <article class="editor">
         <label>
           <span>标题</span>
-          <input bind:value={drafts[index].title} />
+          <input bind:value={drafts[activeIndex].title} />
         </label>
         <div class="row">
           <label>
             <span>插槽</span>
-            <select bind:value={drafts[index].insertion_mode}>
+            <select bind:value={drafts[activeIndex].insertion_mode}>
               <option value="scene_prelude">场景前奏</option>
               <option value="rules_guard">规则守卫</option>
               <option value="codex_only">阅读侧栏</option>
@@ -48,25 +63,29 @@
           </label>
           <label class="toggle">
             <span>启用</span>
-            <input type="checkbox" bind:checked={drafts[index].enabled} />
+            <input type="checkbox" bind:checked={drafts[activeIndex].enabled} />
           </label>
         </div>
         <label>
           <span>内容</span>
-          <textarea bind:value={drafts[index].content} rows="3"></textarea>
+          <textarea bind:value={drafts[activeIndex].content} rows="5"></textarea>
         </label>
         <p class="meta">
-          {drafts[index].source} · {loreSlotLabel(drafts[index].insertion_mode)}
+          {drafts[activeIndex].source} · {loreSlotLabel(drafts[activeIndex].insertion_mode)}
         </p>
         <div class="actions">
-          <button type="button" on:click={() => dispatch('save', drafts[index])}>保存条目</button>
-          <button type="button" class="ghost" on:click={() => dispatch('remove', drafts[index].id)}>
-            删除
+          <button type="button" class="primary" on:click={() => dispatch('save', drafts[activeIndex])}>
+            保存并刷新预览
+          </button>
+          <button type="button" class="ghost" on:click={() => dispatch('remove', drafts[activeIndex].id)}>
+            删除条目
           </button>
         </div>
       </article>
-    {/each}
-  </div>
+    </div>
+  {:else}
+    <p class="empty">当前没有可编辑的世界书条目。</p>
+  {/if}
 </section>
 
 <style>
@@ -75,8 +94,9 @@
     gap: 16px;
     padding: 24px;
     border-radius: 24px;
-    border: 1px solid rgba(255, 243, 214, 0.1);
-    background: rgba(14, 11, 9, 0.82);
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(248, 243, 234, 0.94);
+    box-shadow: 0 14px 28px rgba(65, 49, 35, 0.06);
   }
 
   .panel-head {
@@ -88,34 +108,75 @@
 
   .eyebrow {
     margin: 0 0 8px;
-    color: #d3b37b;
+    color: #91765d;
     text-transform: uppercase;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.18em;
     font-size: 0.68rem;
   }
 
   h3,
-  .panel-head p {
+  .panel-head p,
+  .empty {
     margin: 0;
   }
 
   h3 {
+    color: #2f261d;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
     font-size: 1.5rem;
   }
 
-  .list {
-    display: grid;
-    gap: 12px;
+  .panel-head p,
+  .empty {
+    color: rgba(63, 47, 35, 0.66);
   }
 
-  article {
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(200px, 0.42fr) minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .entity-list {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .entity-list button {
+    display: grid;
+    gap: 4px;
+    padding: 14px 16px;
+    text-align: left;
+    border-radius: 18px;
+    border: 1px solid rgba(121, 103, 81, 0.12);
+    background: rgba(255, 255, 255, 0.78);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .entity-list button.active {
+    border-color: rgba(31, 106, 87, 0.24);
+    background: rgba(31, 106, 87, 0.08);
+  }
+
+  .entity-list strong {
+    color: #2f261d;
+  }
+
+  .entity-list span,
+  .meta {
+    color: rgba(63, 47, 35, 0.62);
+    font-size: 0.82rem;
+  }
+
+  .editor {
     display: grid;
     gap: 12px;
-    padding: 16px;
-    border-radius: 18px;
-    background: rgba(28, 20, 15, 0.88);
-    border: 1px solid rgba(255, 238, 207, 0.06);
+    padding: 18px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(121, 103, 81, 0.12);
   }
 
   .row {
@@ -129,14 +190,13 @@
     gap: 8px;
   }
 
-  .toggle {
-    align-items: center;
+  label span {
+    font-size: 0.82rem;
+    color: rgba(63, 47, 35, 0.82);
   }
 
-  span,
-  .meta {
-    font-size: 0.82rem;
-    color: rgba(255, 243, 214, 0.74);
+  .toggle {
+    align-items: center;
   }
 
   input,
@@ -150,29 +210,42 @@
   textarea,
   select {
     border-radius: 14px;
-    border: 1px solid rgba(255, 238, 207, 0.1);
-    background: rgba(15, 11, 9, 0.92);
-    color: #fff4dd;
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(250, 246, 239, 0.92);
+    color: #2f261d;
     padding: 12px 14px;
   }
 
   .actions {
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
   }
 
-  button {
-    min-height: 42px;
+  .primary,
+  .ghost {
+    min-height: 44px;
     padding: 0 16px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 227, 170, 0.22);
-    background: linear-gradient(135deg, rgba(204, 150, 70, 0.22), rgba(255, 229, 178, 0.12));
-    color: #fff4dd;
+    border: none;
     cursor: pointer;
   }
 
+  .primary {
+    background: #1f6a57;
+    color: #f6f3eb;
+    font-weight: 700;
+  }
+
   .ghost {
-    background: rgba(255, 248, 230, 0.04);
-    border-color: rgba(255, 238, 207, 0.08);
+    background: rgba(121, 103, 81, 0.08);
+    color: #5f4f3e;
+  }
+
+  @media (max-width: 920px) {
+    .workspace,
+    .row {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

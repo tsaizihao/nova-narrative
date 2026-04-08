@@ -14,30 +14,16 @@
   }>();
 </script>
 
-<section class="hero">
+<section class="workspace-hero">
   <div class="copy">
-    <p class="eyebrow">Desktop Story Foundry</p>
-    <h1>把一本小说唤醒成可参与的视觉故事</h1>
+    <p class="eyebrow">Import</p>
+    <h1>先导入小说，再让系统开始改编</h1>
     <p class="lede">
-      导入中文纯文本后，系统会自动抽取人物、时间、地点、规则和冲突，把它编译成一个可以重玩的互动视觉小说。
+      把纯文本贴进来，下一步就是解析人物、世界、规则和可互动场景。
     </p>
-    <div class="feature-grid">
-      <article>
-        <span>01</span>
-        <strong>结构化解析</strong>
-        <p>人物、规则、地点与时间线会被整理成 Story Bible。</p>
-      </article>
-      <article>
-        <span>02</span>
-        <strong>半结构化分支</strong>
-        <p>关键节点稳定，局部演出与自由输入由 AI 驱动。</p>
-      </article>
-      <article>
-        <span>03</span>
-        <strong>可回溯结局</strong>
-        <p>每一次抉择都进入侧栏记录，你可以从关键节点重写命运。</p>
-      </article>
-    </div>
+    <p class="support-copy">
+      审阅阶段还能继续校正角色、世界书和规则，然后再进入互动试玩。
+    </p>
   </div>
 
   <div class="composer">
@@ -81,28 +67,29 @@
       on:click={() => dispatch('submit')}
       disabled={busy || !projectName.trim() || !novelText.trim()}
     >
-      {busy ? '故事准备中...' : '开始解析与改编'}
+      {busy ? '故事准备中' : '开始解析与改编'}
     </button>
   </div>
 </section>
 
 <style>
-  .hero {
+  .workspace-hero {
     display: grid;
-    grid-template-columns: 1.1fr 0.9fr;
+    grid-template-columns: 1.05fr 0.95fr;
     gap: 28px;
+    align-items: start;
   }
 
   .copy,
   .composer {
-    border-radius: 30px;
-    border: 1px solid rgba(255, 243, 214, 0.11);
-    background: rgba(14, 11, 9, 0.72);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+    border-radius: 28px;
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(248, 243, 234, 0.94);
+    box-shadow: 0 18px 42px rgba(65, 49, 35, 0.08);
   }
 
   .copy {
-    padding: 42px;
+    padding: 40px;
   }
 
   .composer {
@@ -114,21 +101,23 @@
   .eyebrow,
   .label {
     margin: 0 0 12px;
-    color: #d3b37b;
+    color: #91765d;
     text-transform: uppercase;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.18em;
     font-size: 0.72rem;
   }
 
   h1,
   h2 {
     margin: 0;
+    color: #2f261d;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
   }
 
   h1 {
-    font-size: clamp(2.4rem, 4.2vw, 4.4rem);
-    line-height: 1.02;
+    max-width: 12ch;
+    font-size: clamp(2.5rem, 4.2vw, 4rem);
+    line-height: 1.06;
   }
 
   h2 {
@@ -136,42 +125,18 @@
   }
 
   .lede {
-    margin: 18px 0 0;
-    max-width: 62ch;
+    margin: 20px 0 0;
+    max-width: 48ch;
     font-size: 1.02rem;
-    line-height: 1.85;
-    color: rgba(253, 245, 228, 0.8);
+    line-height: 1.8;
+    color: rgba(62, 48, 36, 0.8);
   }
 
-  .feature-grid {
-    margin-top: 28px;
-    display: grid;
-    gap: 14px;
-  }
-
-  .feature-grid article {
-    padding: 18px 20px;
-    border-radius: 18px;
-    background: linear-gradient(145deg, rgba(80, 49, 34, 0.58), rgba(29, 22, 18, 0.68));
-    border: 1px solid rgba(255, 232, 191, 0.08);
-  }
-
-  .feature-grid span {
-    font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: 1.4rem;
-    color: #efc97f;
-  }
-
-  .feature-grid strong,
-  .feature-grid p {
-    display: block;
-    margin-top: 6px;
-  }
-
-  .feature-grid p {
-    margin-bottom: 0;
+  .support-copy {
+    margin: 18px 0 0;
+    max-width: 40ch;
     line-height: 1.7;
-    color: rgba(255, 245, 228, 0.72);
+    color: rgba(62, 48, 36, 0.64);
   }
 
   .section-head {
@@ -188,16 +153,16 @@
 
   label span {
     font-size: 0.82rem;
-    color: rgba(244, 226, 193, 0.82);
+    color: rgba(63, 47, 35, 0.82);
   }
 
   input,
   textarea {
     width: 100%;
-    border: 1px solid rgba(255, 238, 207, 0.12);
+    border: 1px solid rgba(121, 103, 81, 0.16);
     border-radius: 18px;
-    background: rgba(24, 18, 14, 0.92);
-    color: #fff4dd;
+    background: rgba(255, 255, 255, 0.92);
+    color: #2f261d;
     font: inherit;
     padding: 14px 16px;
     resize: none;
@@ -226,15 +191,15 @@
 
   .primary {
     min-height: 54px;
-    background: linear-gradient(135deg, #d8a34e, #f3d89e);
-    color: #26180f;
+    background: #1f6a57;
+    color: #f6f3eb;
     font-weight: 700;
   }
 
   .ghost {
     padding: 11px 18px;
-    background: rgba(255, 244, 219, 0.08);
-    color: #f7e5bf;
+    background: rgba(121, 103, 81, 0.08);
+    color: #5f4f3e;
   }
 
   .primary:hover,
@@ -244,11 +209,11 @@
 
   .error {
     margin: 0;
-    color: #ffb2a6;
+    color: #b14d3b;
   }
 
   @media (max-width: 980px) {
-    .hero {
+    .workspace-hero {
       grid-template-columns: 1fr;
     }
 
@@ -258,4 +223,3 @@
     }
   }
 </style>
-

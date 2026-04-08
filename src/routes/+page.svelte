@@ -1,15 +1,15 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+
   import BuildProgressScreen from '$lib/components/BuildProgressScreen.svelte';
-  import CharacterReviewPanel from '$lib/components/CharacterReviewPanel.svelte';
   import EndingScreen from '$lib/components/EndingScreen.svelte';
   import ImportScreen from '$lib/components/ImportScreen.svelte';
-  import ReaderStage from '$lib/components/ReaderStage.svelte';
-  import RuleBookPanel from '$lib/components/RuleBookPanel.svelte';
-  import StoryCodexPanel from '$lib/components/StoryCodexPanel.svelte';
-  import StoryStatePanel from '$lib/components/StoryStatePanel.svelte';
-  import WorldBookPanel from '$lib/components/WorldBookPanel.svelte';
-  import { loreLifecycleTone, loreSlotLabel, ruleBadgeTone } from '$lib/rule-helpers';
+  import PhaseStepper from '$lib/components/PhaseStepper.svelte';
+  import ReaderDesktopShell from '$lib/components/ReaderDesktopShell.svelte';
+  import ReaderMobileShell from '$lib/components/ReaderMobileShell.svelte';
+  import ReviewWorkspace from '$lib/components/ReviewWorkspace.svelte';
   import { api } from '$lib/api/client';
+  import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
   import type {
     ActiveLoreEntry,
@@ -25,11 +25,14 @@
   } from '$lib/types';
 
   type Phase = 'import' | 'building' | 'review' | 'reader' | 'ending';
+  type StepperPhase = Exclude<Phase, 'ending'>;
 
   let phase: Phase = 'import';
+  let stepperPhase: StepperPhase = 'import';
   let projectName = SAMPLE_PROJECT_NAME;
   let novelText = SAMPLE_NOVEL;
   let project: NovelProject | null = null;
+  let readerLayoutMode: ReaderLayoutMode = 'desktop';
   let buildStatus: BuildStatus = {
     stage: 'created',
     message: '等待新的故事',
@@ -45,6 +48,7 @@
   let freeInput = '';
   let busy = false;
 
+  const phaseLabels = ['导入', '构建', '审阅', '游玩'];
   const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
 
   async function refreshCodex(sessionId: string) {
@@ -269,6 +273,19 @@
     novelText = SAMPLE_NOVEL;
     error = '';
   }
+
+  $: stepperPhase = phase === 'ending' ? 'reader' : phase;
+
+  onMount(() => {
+    const updateReaderLayout = () => {
+      readerLayoutMode = resolveReaderLayoutMode(window.innerWidth);
+    };
+
+    updateReaderLayout();
+    window.addEventListener('resize', updateReaderLayout);
+
+    return () => window.removeEventListener('resize', updateReaderLayout);
+  });
 </script>
 
 <svelte:head>
@@ -282,9 +299,12 @@
   <header class="topbar">
     <div>
       <p>Nova Narrative</p>
-      <strong>AI 互动视觉小说阅读器</strong>
+      <strong>小说改编工作台</strong>
     </div>
-    <span>{project?.name ?? '单本项目制'}</span>
+    <div class="topbar-meta">
+      <span>{project?.name ?? '单本项目制'}</span>
+      <PhaseStepper phase={stepperPhase} labels={phaseLabels} />
+    </div>
   </header>
 
   {#if phase === 'import'}
@@ -313,71 +333,45 @@
         </div>
         <button type="button" on:click={enterStory} disabled={busy}>进入互动故事</button>
       </section>
-
-      <div class="preview-grid">
-        <article>
-          <strong>lore 预览</strong>
-          <div class="preview-list">
-            {#each lorePreview as lore}
-              <div class="preview-item">
-                <p>{lore.title}</p>
-                <span class={`tone-${loreLifecycleTone(lore.lifecycle_state)}`}>
-                  {loreSlotLabel(lore.slot)} · {lore.reason}
-                </span>
-              </div>
-            {/each}
-          </div>
-        </article>
-        <article>
-          <strong>规则预览</strong>
-          <div class="preview-list">
-            {#if rulePreview}
-              {#each rulePreview.active_rules as rule}
-                <div class="preview-item">
-                  <p>{rule.name}</p>
-                  <span class={`tone-${ruleBadgeTone(rule.priority)}`}>{rule.explanation}</span>
-                </div>
-              {/each}
-              <p class="subtle">
-                预测状态：{rulePreview.story_state.possibility_flags.length
-                  ? rulePreview.story_state.possibility_flags.join(' / ')
-                  : rulePreview.story_state.event_flags.join(' / ') || '暂无变化'}
-              </p>
-            {/if}
-          </div>
-        </article>
-      </div>
-
-      {#if error}
-        <p class="error review-error">{error}</p>
-      {/if}
-
-      <div class="review-grid">
-        <CharacterReviewPanel cards={project.character_cards} on:save={saveCharacter} />
-        <WorldBookPanel entries={project.worldbook_entries} on:save={saveWorldBook} on:remove={deleteWorldBook} />
-        <RuleBookPanel rules={project.rules} on:save={saveRule} on:remove={deleteRule} />
-      </div>
+      <ReviewWorkspace
+        {project}
+        {lorePreview}
+        {rulePreview}
+        {error}
+        on:saveCharacter={saveCharacter}
+        on:saveWorldBook={saveWorldBook}
+        on:deleteWorldBook={deleteWorldBook}
+        on:saveRule={saveRule}
+        on:deleteRule={deleteRule}
+      />
     </div>
   {:else if phase === 'reader' && payload && activeSession}
-    <div class="reader-grid">
-      <ReaderStage
+    {#if readerLayoutMode === 'desktop'}
+      <ReaderDesktopShell
         {payload}
+        codex={codex}
+        session={activeSession}
+        {freeInput}
         {busy}
         {error}
-        {freeInput}
         on:choose={(event) => choose(event.detail)}
         on:freeInputChange={(event) => (freeInput = event.detail)}
         on:submitFreeInput={submitFreeInput}
-      />
-      <StoryCodexPanel
-        {codex}
-        session={activeSession}
-        activeLore={payload.active_lore}
-        activeRules={payload.active_rules}
         on:rewind={(event) => rewind(event.detail)}
       />
-      <StoryStatePanel storyState={payload.story_state} activeRules={payload.active_rules} />
-    </div>
+    {:else}
+      <ReaderMobileShell
+        {payload}
+        codex={codex}
+        {freeInput}
+        {busy}
+        {error}
+        on:choose={(event) => choose(event.detail)}
+        on:freeInputChange={(event) => (freeInput = event.detail)}
+        on:submitFreeInput={submitFreeInput}
+        on:rewind={(event) => rewind(event.detail)}
+      />
+    {/if}
   {:else if phase === 'ending' && payload && activeSession && payload.session.ending_report}
     <EndingScreen ending={payload.session.ending_report} session={activeSession} on:rewind={(event) => rewind(event.detail)} />
   {/if}
@@ -388,9 +382,9 @@
     margin: 0;
     min-height: 100vh;
     background:
-      radial-gradient(circle at top, rgba(199, 160, 98, 0.2), transparent 30%),
-      linear-gradient(160deg, #120f0d 0%, #201612 45%, #40261a 100%);
-    color: #f3ead8;
+      radial-gradient(circle at top, rgba(215, 194, 166, 0.4), transparent 30%),
+      linear-gradient(180deg, #f6f1e8 0%, #efe7da 100%);
+    color: #2f261d;
     font-family: 'IBM Plex Sans', 'PingFang SC', sans-serif;
   }
 
@@ -420,14 +414,14 @@
     inset: 0 auto auto -100px;
     width: 320px;
     height: 320px;
-    background: rgba(207, 153, 74, 0.2);
+    background: rgba(218, 196, 160, 0.34);
   }
 
   .page-glow-right {
     inset: 120px -60px auto auto;
     width: 280px;
     height: 280px;
-    background: rgba(89, 49, 28, 0.35);
+    background: rgba(181, 149, 113, 0.18);
   }
 
   .topbar {
@@ -438,12 +432,13 @@
     align-items: center;
     gap: 18px;
     margin: 0 auto 22px;
-    width: min(1440px, 100%);
+    width: min(1280px, 100%);
     padding: 16px 20px;
-    border-radius: 20px;
-    border: 1px solid rgba(255, 243, 214, 0.08);
-    background: rgba(15, 11, 8, 0.55);
-    backdrop-filter: blur(18px);
+    border-radius: 24px;
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(250, 246, 239, 0.86);
+    box-shadow: 0 16px 36px rgba(70, 54, 39, 0.08);
+    backdrop-filter: blur(14px);
   }
 
   .topbar p,
@@ -454,9 +449,9 @@
 
   .topbar p {
     font-size: 0.72rem;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: #d2b37b;
+    color: #91765d;
   }
 
   .topbar strong {
@@ -466,8 +461,14 @@
     font-size: 1.35rem;
   }
 
+  .topbar-meta {
+    display: grid;
+    justify-items: end;
+    gap: 10px;
+  }
+
   .topbar span {
-    color: rgba(255, 243, 214, 0.68);
+    color: rgba(63, 47, 35, 0.64);
     font-size: 0.9rem;
   }
 
@@ -479,8 +480,7 @@
     font-size: 0.68rem;
   }
 
-  .review-shell,
-  .reader-grid {
+  .review-shell {
     position: relative;
     z-index: 1;
     width: min(1440px, 100%);
@@ -492,12 +492,12 @@
     gap: 18px;
   }
 
-  .review-hero,
-  .preview-grid article {
+  .review-hero {
     padding: 24px;
     border-radius: 24px;
-    border: 1px solid rgba(255, 243, 214, 0.1);
-    background: rgba(14, 11, 9, 0.82);
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(248, 243, 234, 0.94);
+    box-shadow: 0 14px 28px rgba(65, 49, 35, 0.06);
   }
 
   .review-hero {
@@ -508,13 +508,12 @@
   }
 
   .review-hero h2,
-  .review-hero p,
-  .preview-grid p,
-  .preview-grid strong {
+  .review-hero p {
     margin: 0;
   }
 
   .review-hero h2 {
+    color: #2f261d;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
     font-size: clamp(2rem, 4vw, 3rem);
   }
@@ -523,7 +522,7 @@
     margin-top: 12px;
     max-width: 760px;
     line-height: 1.7;
-    color: rgba(255, 243, 214, 0.76);
+    color: rgba(63, 47, 35, 0.74);
   }
 
   .review-hero button {
@@ -531,91 +530,27 @@
     min-height: 48px;
     padding: 0 18px;
     border-radius: 999px;
-    border: 1px solid rgba(255, 227, 170, 0.22);
-    background: linear-gradient(135deg, rgba(204, 150, 70, 0.22), rgba(255, 229, 178, 0.12));
-    color: #fff4dd;
+    border: none;
+    background: #1f6a57;
+    color: #f6f3eb;
     cursor: pointer;
   }
 
-  .preview-grid,
-  .review-grid {
-    display: grid;
-    gap: 18px;
-  }
-
-  .preview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .review-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .preview-list {
-    margin-top: 14px;
-    display: grid;
-    gap: 12px;
-  }
-
-  .preview-item {
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: rgba(28, 20, 15, 0.88);
-    border: 1px solid rgba(255, 238, 207, 0.06);
-  }
-
-  .preview-item p {
-    margin: 0 0 6px;
-  }
-
-  .preview-item span,
-  .subtle {
-    color: rgba(255, 243, 214, 0.7);
-    font-size: 0.82rem;
-  }
-
-  .reader-grid {
-    display: grid;
-    gap: 18px;
-    grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr) minmax(280px, 0.8fr);
-  }
-
-  .review-error,
-  .error {
-    color: #ffb7a5;
-  }
-
-  .tone-danger {
-    color: #ffb7a5;
-  }
-
-  .tone-warning {
-    color: #f4cf90;
-  }
-
-  .tone-accent,
-  .tone-success {
-    color: #bfe5db;
-  }
-
-  .tone-muted {
-    color: rgba(255, 243, 214, 0.6);
-  }
-
   @media (max-width: 1200px) {
-    .review-grid,
-    .reader-grid {
+    .topbar {
+      display: grid;
       grid-template-columns: 1fr;
+      align-items: flex-start;
+    }
+
+    .topbar-meta {
+      justify-items: start;
     }
   }
 
   @media (max-width: 900px) {
     .page-shell {
       padding: 18px;
-    }
-
-    .preview-grid {
-      grid-template-columns: 1fr;
     }
 
     .review-hero {

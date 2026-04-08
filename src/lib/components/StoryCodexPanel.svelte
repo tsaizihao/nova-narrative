@@ -10,27 +10,27 @@
   export let activeRules: ActiveRuleHit[] = [];
 
   const dispatch = createEventDispatcher<{ rewind: string }>();
-  let activeTab: 'characters' | 'lore' | 'timeline' | 'choices' = 'characters';
+  let activeTab: 'characters' | 'lore' | 'timeline' | 'choices' = 'lore';
 </script>
 
-<aside class="codex">
-  <div class="codex-head">
+<aside class="rail-panel">
+  <div class="rail-head">
     <div>
-      <p class="eyebrow">Story Codex</p>
+      <p class="eyebrow">World</p>
       <h3>世界侧栏</h3>
     </div>
-    <p>{session?.visited_scenes.length ?? 0} 个场景已解锁</p>
+    <p>{session?.visited_scenes.length ?? 0} 个场景</p>
   </div>
 
   <div class="tabs">
-    <button type="button" class:active={activeTab === 'characters'} on:click={() => (activeTab = 'characters')}>人物</button>
     <button type="button" class:active={activeTab === 'lore'} on:click={() => (activeTab = 'lore')}>Lore</button>
+    <button type="button" class:active={activeTab === 'characters'} on:click={() => (activeTab = 'characters')}>人物</button>
     <button type="button" class:active={activeTab === 'timeline'} on:click={() => (activeTab = 'timeline')}>时间线</button>
     <button type="button" class:active={activeTab === 'choices'} on:click={() => (activeTab = 'choices')}>抉择</button>
   </div>
 
   {#if activeTab === 'characters'}
-    <div class="list">
+    <div class="rail-stack">
       {#each codex?.characters ?? [] as character}
         <article>
           <strong>{character.name}</strong>
@@ -40,14 +40,7 @@
       {/each}
     </div>
   {:else if activeTab === 'lore'}
-    <div class="list">
-      {#each activeRules as rule}
-        <article>
-          <strong>{rule.name}</strong>
-          <span class={`tone-${ruleBadgeTone(rule.priority)}`}>{rule.priority}</span>
-          <p>{rule.explanation}</p>
-        </article>
-      {/each}
+    <div class="rail-stack">
       {#each activeLore as lore}
         <article>
           <strong>{lore.title}</strong>
@@ -57,15 +50,19 @@
           <p>{lore.reason}</p>
         </article>
       {/each}
-      {#each codex?.world_rules ?? [] as rule}
+      {#each activeRules as rule}
         <article>
-          <strong>原始规则</strong>
-          <p>{rule.description}</p>
+          <strong>{rule.name}</strong>
+          <span class={`tone-${ruleBadgeTone(rule.priority)}`}>{rule.priority}</span>
+          <p>{rule.explanation}</p>
         </article>
       {/each}
+      {#if !activeLore.length && !activeRules.length}
+        <p class="empty">这一轮还没有新的 lore 或规则摘要。</p>
+      {/if}
     </div>
   {:else if activeTab === 'timeline'}
-    <div class="list">
+    <div class="rail-stack">
       {#each codex?.timeline ?? [] as entry}
         <article>
           <strong>{entry.label}</strong>
@@ -74,17 +71,17 @@
       {/each}
     </div>
   {:else}
-    <div class="list">
+    <div class="rail-stack">
       <article>
         <strong>最近选择</strong>
-        <p>{session?.major_choices.length ? session?.major_choices.join(' / ') : '还没有足够的决定。'}</p>
+        <p>{session?.major_choices.length ? session.major_choices.join(' / ') : '还没有足够的决定。'}</p>
       </article>
       <article>
         <strong>已知事实</strong>
-        <p>{session?.known_facts.length ? session?.known_facts.join('；') : '故事尚未给出新的事实。'}</p>
+        <p>{session?.known_facts.length ? session.known_facts.join('；') : '故事尚未给出新的事实。'}</p>
       </article>
       <article>
-        <strong>可回溯节点</strong>
+        <strong>回溯节点</strong>
         <div class="checkpoint-list">
           {#each session?.available_checkpoints ?? [] as checkpoint}
             <button type="button" on:click={() => dispatch('rewind', checkpoint.checkpoint.id)}>
@@ -98,21 +95,21 @@
 </aside>
 
 <style>
-  .codex {
+  .rail-panel {
     display: grid;
+    gap: 14px;
     align-content: start;
-    gap: 16px;
-    padding: 24px;
+    padding: 18px;
     border-radius: 24px;
-    border: 1px solid rgba(255, 243, 214, 0.1);
-    background: rgba(14, 11, 9, 0.82);
-    min-height: 100%;
+    border: 1px solid rgba(255, 243, 214, 0.08);
+    background: rgba(12, 11, 15, 0.88);
+    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
   }
 
-  .codex-head {
+  .rail-head {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     align-items: flex-end;
   }
 
@@ -120,28 +117,31 @@
     margin: 0 0 8px;
     color: #d3b37b;
     text-transform: uppercase;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.18em;
     font-size: 0.68rem;
   }
 
   h3,
-  .codex-head p {
+  .rail-head p,
+  .empty {
     margin: 0;
   }
 
   h3 {
+    color: #fff4dd;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 
-  .codex-head p {
-    font-size: 0.82rem;
-    color: rgba(255, 243, 214, 0.64);
+  .rail-head p,
+  .empty {
+    color: rgba(255, 243, 214, 0.6);
+    font-size: 0.8rem;
   }
 
   .tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -156,23 +156,24 @@
   }
 
   .tabs button {
-    min-height: 40px;
+    min-height: 36px;
+    font-size: 0.82rem;
   }
 
   .tabs button.active {
-    background: linear-gradient(135deg, rgba(204, 150, 70, 0.22), rgba(255, 229, 178, 0.12));
-    border-color: rgba(255, 227, 170, 0.22);
+    background: rgba(31, 106, 87, 0.22);
+    border-color: rgba(31, 106, 87, 0.24);
   }
 
-  .list {
+  .rail-stack {
     display: grid;
-    gap: 12px;
+    gap: 10px;
   }
 
   article {
-    padding: 16px;
-    border-radius: 18px;
-    background: rgba(28, 20, 15, 0.88);
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(255, 248, 230, 0.05);
     border: 1px solid rgba(255, 238, 207, 0.06);
   }
 
@@ -182,10 +183,20 @@
     display: block;
   }
 
+  article strong {
+    color: #fff4dd;
+  }
+
   article span {
     margin-top: 4px;
-    color: #f0cf8d;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
+  }
+
+  article p {
+    margin: 8px 0 0;
+    color: rgba(255, 243, 214, 0.7);
+    line-height: 1.6;
+    font-size: 0.86rem;
   }
 
   .tone-danger {
@@ -205,12 +216,6 @@
     color: rgba(255, 243, 214, 0.6);
   }
 
-  article p {
-    margin: 10px 0 0;
-    line-height: 1.65;
-    color: rgba(255, 243, 214, 0.72);
-  }
-
   .checkpoint-list {
     margin-top: 10px;
     display: flex;
@@ -219,6 +224,8 @@
   }
 
   .checkpoint-list button {
-    padding: 9px 12px;
+    min-height: 34px;
+    padding: 0 12px;
+    font-size: 0.8rem;
   }
 </style>

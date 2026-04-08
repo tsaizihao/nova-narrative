@@ -10,9 +10,9 @@
 
 <section class="build-shell">
   <div class="intro">
-    <p class="eyebrow">Compiling Story Package</p>
+    <p class="eyebrow">Build</p>
     <h2>{stageHeadline(buildStatus.stage)}</h2>
-    <p>{projectName} 正在被拆解成可互动的世界模型、场景图和结局骨架。</p>
+    <p>{projectName} 正在被整理成一个可审阅、可游玩的互动故事项目。</p>
   </div>
 
   <div class="meter">
@@ -20,9 +20,9 @@
   </div>
   <p class="meter-text">{buildStatus.progress}% · {buildStatus.message}</p>
 
-  <div class="stages">
+  <ol class="stage-list">
     {#each cards as card}
-      <article class:done={card.status === 'done'} class:current={card.status === 'current'} class:error={card.status === 'error'}>
+      <li class:done={card.status === 'done'} class:current={card.status === 'current'} class:error={card.status === 'error'}>
         <span>{card.label}</span>
         <strong>
           {#if card.status === 'done'}
@@ -35,32 +35,35 @@
             等待中
           {/if}
         </strong>
-      </article>
+      </li>
     {/each}
-  </div>
+  </ol>
 </section>
 
 <style>
   .build-shell {
     display: grid;
     gap: 24px;
+    width: min(920px, 100%);
+    margin: 0 auto;
     padding: 38px;
     border-radius: 30px;
-    border: 1px solid rgba(255, 243, 214, 0.11);
-    background: rgba(14, 11, 9, 0.78);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(248, 243, 234, 0.95);
+    box-shadow: 0 18px 42px rgba(65, 49, 35, 0.08);
   }
 
   .eyebrow {
     margin: 0 0 12px;
-    color: #d3b37b;
+    color: #91765d;
     text-transform: uppercase;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.18em;
     font-size: 0.72rem;
   }
 
   h2 {
     margin: 0 0 12px;
+    color: #2f261d;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
     font-size: clamp(2rem, 4vw, 3rem);
   }
@@ -68,14 +71,14 @@
   .intro p:last-child,
   .meter-text {
     margin: 0;
-    color: rgba(255, 243, 214, 0.74);
+    color: rgba(63, 47, 35, 0.7);
   }
 
   .meter {
     position: relative;
-    min-height: 12px;
+    min-height: 14px;
     border-radius: 999px;
-    background: rgba(255, 241, 210, 0.08);
+    background: rgba(121, 103, 81, 0.12);
     overflow: hidden;
   }
 
@@ -83,46 +86,50 @@
     position: absolute;
     inset: 0 auto 0 0;
     border-radius: inherit;
-    background: linear-gradient(90deg, #c57a37 0%, #f0c67e 50%, #f6e6bb 100%);
-    box-shadow: 0 0 28px rgba(240, 198, 126, 0.4);
+    background: linear-gradient(90deg, #1f6a57 0%, #3b8f78 100%);
+    box-shadow: 0 0 18px rgba(59, 143, 120, 0.2);
     animation: pulse 1.8s ease-in-out infinite;
   }
 
-  .stages {
+  .stage-list {
     display: grid;
     gap: 14px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
   }
 
-  article {
+  li {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 18px;
     padding: 18px 20px;
     border-radius: 18px;
-    background: rgba(27, 20, 16, 0.88);
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(121, 103, 81, 0.12);
   }
 
-  article.done {
-    border-color: rgba(212, 183, 118, 0.25);
+  li.done {
+    border-color: rgba(31, 106, 87, 0.22);
   }
 
-  article.current {
-    background: linear-gradient(135deg, rgba(87, 51, 28, 0.76), rgba(28, 20, 15, 0.92));
-    border-color: rgba(240, 198, 126, 0.3);
+  li.current {
+    background: rgba(31, 106, 87, 0.1);
+    border-color: rgba(31, 106, 87, 0.28);
   }
 
-  article.error {
-    border-color: rgba(255, 161, 143, 0.28);
+  li.error {
+    border-color: rgba(177, 77, 59, 0.28);
   }
 
-  article span {
+  li span {
     font-size: 1rem;
+    color: #2f261d;
   }
 
-  article strong {
-    color: #f0cf8d;
+  li strong {
+    color: #1f6a57;
     font-size: 0.85rem;
   }
 
@@ -132,8 +139,7 @@
       filter: saturate(1);
     }
     50% {
-      filter: saturate(1.2);
+      filter: saturate(1.08);
     }
   }
 </style>
-

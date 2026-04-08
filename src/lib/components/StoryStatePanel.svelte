@@ -6,16 +6,16 @@
   export let activeRules: ActiveRuleHit[] = [];
 </script>
 
-<aside class="state-panel">
-  <div class="state-head">
+<aside class="state-rail">
+  <div class="rail-head">
     <div>
       <p class="eyebrow">Runtime</p>
       <h3>世界状态</h3>
     </div>
-    <p>{storyState.visited_scenes.length} 个已访问场景</p>
+    <p>{storyState.visited_scenes.length} 个场景</p>
   </div>
 
-  <div class="list">
+  <div class="rail-stack">
     <article>
       <strong>事件标记</strong>
       <p>{storyState.event_flags.length ? storyState.event_flags.join(' / ') : '暂无事件旗标'}</p>
@@ -33,9 +33,13 @@
     <article>
       <strong>角色状态</strong>
       <div class="chips">
-        {#each storyState.character_states as state}
-          <span>{state.character_id}: {state.status_flags.length ? state.status_flags.join('、') : '稳定'}</span>
-        {/each}
+        {#if storyState.character_states.length}
+          {#each storyState.character_states as state}
+            <span>{state.character_id}: {state.status_flags.length ? state.status_flags.join('、') : '稳定'}</span>
+          {/each}
+        {:else}
+          <span>暂无角色状态变化</span>
+        {/if}
       </div>
     </article>
     <article>
@@ -54,21 +58,21 @@
 </aside>
 
 <style>
-  .state-panel {
+  .state-rail {
     display: grid;
+    gap: 14px;
     align-content: start;
-    gap: 16px;
-    padding: 24px;
+    padding: 18px;
     border-radius: 24px;
-    border: 1px solid rgba(255, 243, 214, 0.1);
-    background: rgba(14, 11, 9, 0.82);
-    min-height: 100%;
+    border: 1px solid rgba(255, 243, 214, 0.08);
+    background: rgba(12, 11, 15, 0.88);
+    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
   }
 
-  .state-head {
+  .rail-head {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     align-items: flex-end;
   }
 
@@ -76,29 +80,35 @@
     margin: 0 0 8px;
     color: #d3b37b;
     text-transform: uppercase;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.18em;
     font-size: 0.68rem;
   }
 
   h3,
-  .state-head p {
+  .rail-head p {
     margin: 0;
   }
 
   h3 {
+    color: #fff4dd;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 
-  .list {
+  .rail-head p {
+    color: rgba(255, 243, 214, 0.6);
+    font-size: 0.8rem;
+  }
+
+  .rail-stack {
     display: grid;
-    gap: 12px;
+    gap: 10px;
   }
 
   article {
-    padding: 16px;
-    border-radius: 18px;
-    background: rgba(28, 20, 15, 0.88);
+    padding: 14px;
+    border-radius: 16px;
+    background: rgba(255, 248, 230, 0.05);
     border: 1px solid rgba(255, 238, 207, 0.06);
   }
 
@@ -107,10 +117,15 @@
     display: block;
   }
 
+  article strong {
+    color: #fff4dd;
+  }
+
   article p {
-    margin: 10px 0 0;
-    line-height: 1.65;
+    margin: 8px 0 0;
     color: rgba(255, 243, 214, 0.72);
+    line-height: 1.6;
+    font-size: 0.86rem;
   }
 
   .chips {
