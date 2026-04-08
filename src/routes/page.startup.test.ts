@@ -150,6 +150,8 @@ describe('+page startup restore flow', () => {
 
     expect(await screen.findByRole('button', { name: '进入互动故事' })).toBeInTheDocument();
     expect(screen.getByText('先校正世界模型，再进入故事')).toBeInTheDocument();
+    expect(screen.getByText('审阅').closest('li')).toHaveAttribute('data-state', 'current');
+    expect(screen.getByText('导入').closest('li')).toHaveAttribute('data-state', 'done');
   });
 
   it('prefills the import form when the recent project has text but is not built yet', async () => {

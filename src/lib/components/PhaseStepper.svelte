@@ -5,19 +5,14 @@
   export let labels: string[] = [];
 
   const order: Phase[] = ['import', 'building', 'review', 'reader'];
-
-  function stateFor(index: number) {
-    const activeIndex = order.indexOf(phase);
-
-    if (index < activeIndex) return 'done';
-    if (index === activeIndex) return 'current';
-    return 'upcoming';
-  }
+  $: activeIndex = order.indexOf(phase);
 </script>
 
 <ol class="stepper">
   {#each labels as label, index}
-    <li data-state={stateFor(index)}>
+    <li
+      data-state={index < activeIndex ? 'done' : index === activeIndex ? 'current' : 'upcoming'}
+    >
       <span>{index + 1}</span>
       <strong>{label}</strong>
     </li>

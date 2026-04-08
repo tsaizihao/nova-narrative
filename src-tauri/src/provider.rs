@@ -400,16 +400,19 @@ fn build_worldbook_entries(
 fn extract_character_names(text: &str) -> Vec<String> {
     let stopwords = [
         "临川城", "北门", "旧约", "真相", "钟声", "火把", "午夜", "城规", "名字", "雨幕",
+        "他们", "她们", "我们", "你们", "有人", "众人", "自己", "城中", "门前", "门外",
     ]
     .into_iter()
     .collect::<BTreeSet<_>>();
     let speaker_re = Regex::new(
-        r"([一-龥]{2,3})(?:说|问|看|听|想|站|走|来到|看见|知道|决定|低声|抬头|守住|打开)",
+        r"([一-龥]{2,3})(?:就|便|还|又|再|仍|都)?(?:说|问|看|听|想|站|走|来到|看见|知道|决定|低声问|低声|抬头|守住|打开)",
     )
     .expect("character regex must compile");
     let mut counts = HashMap::<String, usize>::new();
     for capture in speaker_re.captures_iter(text) {
-        let candidate = capture[1].to_string();
+        let Some(candidate) = sanitize_character_candidate(&capture[1], &stopwords) else {
+            continue;
+        };
         if !stopwords.contains(candidate.as_str()) {
             *counts.entry(candidate).or_insert(0) += 1;
         }
@@ -426,11 +429,13 @@ fn extract_character_names(text: &str) -> Vec<String> {
 }
 
 fn extract_locations(text: &str) -> Vec<String> {
-    let re = Regex::new(r"([一-龥]{2,8}(?:城|门|河|山|宫|府|楼|镇|村|院))")
+    let re = Regex::new(r"([一-龥]{1,4}(?:城|门|河|山|宫|府|楼|镇|村|院))")
         .expect("location regex must compile");
     let mut names = BTreeSet::new();
     for capture in re.captures_iter(text) {
-        names.insert(capture[1].to_string());
+        if let Some(candidate) = sanitize_location_candidate(&capture[1]) {
+            names.insert(candidate);
+        }
     }
     let mut locations = names.into_iter().collect::<Vec<_>>();
     if locations.is_empty() {
@@ -459,4 +464,94 @@ fn extract_rule_sentences(text: &str) -> Vec<String> {
     }
     rules.truncate(4);
     rules
+}
+
+fn sanitize_character_candidate(candidate: &str, stopwords: &BTreeSet<&str>) -> Option<String> {
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let normalized = if trimmed.chars().count() == 3 {
+        let chars = trimmed.chars().collect::<Vec<_>>();
+        if "就便还又再仍都".contains(chars[2]) {
+            chars[..2].iter().collect::<String>()
+        } else {
+            trimmed.to_string()
+        }
+    } else {
+        trimmed.to_string()
+    };
+
+    if !(2..=3).contains(&normalized.chars().count()) {
+        return None;
+    }
+    if stopwords.contains(normalized.as_str()) {
+        return None;
+    }
+
+    let first = normalized.chars().next()?;
+    if !COMMON_CHINESE_SURNAMES.contains(first) {
+        return None;
+    }
+
+    Some(normalized)
+}
+
+fn sanitize_location_candidate(candidate: &str) -> Option<String> {
+    let mut normalized = candidate.trim().to_string();
+    if normalized.is_empty() {
+        return None;
+    }
+
+    for prefix in [
+        "打开", "站在", "走到", "来到", "知道", "守住", "进入", "回到", "离开", "前往", "之后",
+        "之前", "他们", "她们", "我们", "你们", "有人", "众人", "自己", "城中", "只要", "绝不",
+        "不能", "不得", "必须",
+    ] {
+        if normalized.starts_with(prefix) {
+            normalized = normalized.trim_start_matches(prefix).to_string();
+        }
+    }
+
+    if !(2..=4).contains(&normalized.chars().count()) {
+        return None;
+    }
+    if ["知道城", "打开门", "站在门"].contains(&normalized.as_str()) {
+        return None;
+    }
+
+    Some(normalized)
+}
+
+const COMMON_CHINESE_SURNAMES: &str =
+    "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳酆鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于时傅皮卞齐康伍余元卜顾孟平黄和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁杜阮蓝闵席季麻强贾路娄危江童颜郭梅盛林刁钟徐丘骆高夏蔡田樊胡凌霍虞万支柯昝管卢莫经房裘缪干解应宗丁宣贲邓郁单杭洪包诸左石崔吉钮龚程嵇邢滑裴陆荣翁荀羊於惠甄曲家封芮羿储靳汲邴糜松井段富巫乌焦巴弓牧隗山谷车侯宓蓬全郗班仰秋仲伊宫宁仇栾暴甘厉戎祖武符刘景詹束龙叶幸司韶郜黎蓟薄印宿白怀蒲邰从鄂索咸籍赖卓蔺屠蒙池乔阴胥能苍双闻莘党翟谭贡劳逄姬申扶堵冉宰郦雍却璩桑桂濮牛寿通边扈燕冀郏浦尚农温别庄晏柴瞿阎充慕连茹习宦艾鱼容向古易慎戈廖庾终暨居衡步都耿满弘匡国文寇广禄阙东欧";
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_character_names, extract_locations};
+
+    fn sample_text() -> &'static str {
+        "第1章 雨夜来客\n\n临川城的钟声刚落，沈砚就看见雨幕中有人提灯而来。\n他知道城规只有一条，午夜之后绝不能打开北门。\n\n第2章 禁忌之门\n\n宁昭低声问他是否还记得旧约，沈砚没有回答。\n城中人都说，只要北门打开一次，河上的雾就会吞掉名字。\n\n第3章 选择\n\n他们站在门前，火把渐灭，钟声再次响起。\n沈砚必须决定，是遵守城规，还是向真相迈进一步。"
+    }
+
+    #[test]
+    fn extract_character_names_prefers_named_characters_over_sentence_fragments() {
+        let names = extract_character_names(sample_text());
+
+        assert!(names.iter().any(|name| name == "沈砚"));
+        assert!(names.iter().any(|name| name == "宁昭"));
+        assert!(names.iter().all(|name| name != "他们"));
+        assert!(names.iter().all(|name| name != "中人都"));
+    }
+
+    #[test]
+    fn extract_locations_avoids_absorbing_entire_sentences() {
+        let locations = extract_locations(sample_text());
+
+        assert!(locations.iter().any(|name| name == "临川城"));
+        assert!(locations.iter().any(|name| name == "北门"));
+        assert!(locations.iter().all(|name| name != "之后绝不能打开北门"));
+        assert!(locations.iter().all(|name| name != "他们站在门"));
+    }
 }
