@@ -1,10 +1,14 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { afterUpdate, createEventDispatcher, onMount } from 'svelte';
 
   export let projectName = '';
   export let novelText = '';
   export let busy = false;
   export let error = '';
+
+  let novelTextarea: HTMLTextAreaElement | null = null;
+
+  const MIN_TEXTAREA_HEIGHT = 320;
 
   const dispatch = createEventDispatcher<{
     submit: void;
@@ -12,6 +16,27 @@
     updateProjectName: string;
     updateNovelText: string;
   }>();
+
+  function syncNovelTextareaHeight(textarea = novelTextarea) {
+    if (!textarea) return;
+
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.max(textarea.scrollHeight, MIN_TEXTAREA_HEIGHT)}px`;
+  }
+
+  function handleNovelTextInput(event: Event) {
+    const textarea = event.currentTarget as HTMLTextAreaElement;
+    syncNovelTextareaHeight(textarea);
+    dispatch('updateNovelText', textarea.value);
+  }
+
+  onMount(() => {
+    syncNovelTextareaHeight();
+  });
+
+  afterUpdate(() => {
+    syncNovelTextareaHeight();
+  });
 </script>
 
 <section class="workspace-hero">
@@ -50,8 +75,10 @@
     <label>
       <span>小说正文</span>
       <textarea
+        bind:this={novelTextarea}
         value={novelText}
-        on:input={(event) => dispatch('updateNovelText', event.currentTarget.value)}
+        on:input={handleNovelTextInput}
+        style:overflow-y="hidden"
         placeholder="粘贴 txt 或 markdown 纯文本内容"
         disabled={busy}
       ></textarea>
@@ -175,6 +202,7 @@
   textarea {
     min-height: 320px;
     line-height: 1.72;
+    overflow-y: hidden;
   }
 
   .primary,
