@@ -1,14 +1,18 @@
 import type {
+  AiProviderKind,
   ActiveLoreEntry,
   ActiveRuleHit,
+  AppAiSettingsSnapshot,
   BuildStatus,
   CharacterCard,
   CheckpointSnapshot,
   CoreConflict,
+  ExternalProviderSettingsInput,
   LoreLifecycleRecord,
   NovelProject,
   RuleDefinition,
   RuleEvaluationResult,
+  SaveAiSettingsInput,
   SceneNode,
   ScenePayload,
   SessionState,
@@ -22,6 +26,23 @@ import type {
 const projects = new Map<string, NovelProject>();
 const packages = new Map<string, StoryPackage>();
 const sessions = new Map<string, SessionState>();
+const providerApiKeys: Record<Exclude<AiProviderKind, 'heuristic'>, string> = {
+  openai_compatible: '',
+  openrouter: ''
+};
+let aiSettings: AppAiSettingsSnapshot = {
+  selected_provider: 'heuristic',
+  openai_compatible: {
+    base_url: '',
+    model: '',
+    has_api_key: false
+  },
+  openrouter: {
+    base_url: 'https://openrouter.ai/api/v1',
+    model: '',
+    has_api_key: false
+  }
+};
 let counter = 0;
 
 function nextId(prefix: string) {
@@ -31,6 +52,26 @@ function nextId(prefix: string) {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function normalizeBaseUrl(value: string) {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function normalizeProviderInput(input: ExternalProviderSettingsInput, fallbackBaseUrl = '') {
+  return {
+    base_url: normalizeBaseUrl(input.base_url || fallbackBaseUrl),
+    model: input.model.trim()
+  };
+}
+
+function isExternalProviderComplete(settings: AppAiSettingsSnapshot) {
+  if (settings.selected_provider === 'heuristic') return true;
+  const active =
+    settings.selected_provider === 'openai_compatible'
+      ? settings.openai_compatible
+      : settings.openrouter;
+  return Boolean(active.base_url && active.model && active.has_api_key);
 }
 
 function splitChapterLines(text: string) {
@@ -761,6 +802,53 @@ function rebuildProject(project: NovelProject): NovelProject {
 }
 
 export const mockBackend = {
+  async get_ai_settings() {
+    return clone(aiSettings);
+  },
+
+  async save_ai_settings(input: SaveAiSettingsInput) {
+    const openaiCompatible = normalizeProviderInput(input.openai_compatible);
+    const openrouter = normalizeProviderInput(input.openrouter, 'https://openrouter.ai/api/v1');
+
+    if (typeof input.openai_compatible.api_key === 'string') {
+      providerApiKeys.openai_compatible = input.openai_compatible.api_key.trim();
+    }
+    if (typeof input.openrouter.api_key === 'string') {
+      providerApiKeys.openrouter = input.openrouter.api_key.trim();
+    }
+
+    aiSettings = {
+      selected_provider: input.selected_provider,
+      openai_compatible: {
+        ...openaiCompatible,
+        has_api_key: Boolean(providerApiKeys.openai_compatible)
+      },
+      openrouter: {
+        ...openrouter,
+        has_api_key: Boolean(providerApiKeys.openrouter)
+      }
+    };
+
+    return clone(aiSettings);
+  },
+
+  async clear_provider_api_key(providerKind: AiProviderKind) {
+    if (providerKind === 'heuristic') {
+      return clone(aiSettings);
+    }
+
+    providerApiKeys[providerKind] = '';
+    aiSettings = {
+      ...aiSettings,
+      [providerKind]: {
+        ...aiSettings[providerKind],
+        has_api_key: false
+      }
+    };
+
+    return clone(aiSettings);
+  },
+
   async create_project(name: string) {
     const project = buildProject(name);
     projects.set(project.id, project);
@@ -811,6 +899,9 @@ export const mockBackend = {
   async build_story_package(projectId: string) {
     const project = projects.get(projectId);
     if (!project) throw new Error('project not found');
+    if (!isExternalProviderComplete(aiSettings)) {
+      throw new Error('需要填写 base URL、模型和 API key');
+    }
 
     const character_cards = buildCharacters();
     const rules = buildRules();

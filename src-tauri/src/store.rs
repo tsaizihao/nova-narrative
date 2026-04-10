@@ -16,34 +16,158 @@ use crate::{
     error::{AppError, AppResult},
     importer::{sanitize_text, split_novel_into_chapters},
     models::{
-        BuildStage, BuildStatus, CharacterCard, NovelProject, ScenePayload, SessionState,
-        StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
+        AiProviderKind, AppAiSettingsSnapshot, BuildStage, BuildStatus, CharacterCard,
+        ExternalProviderSettingsInput, ExternalProviderSettingsSnapshot, NovelProject, SaveAiSettingsInput,
+        ScenePayload, SessionState, StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
     },
-    provider::{HeuristicStoryProvider, StoryAiProvider},
+    provider::{
+        ChatCompletionsTransport, HeuristicStoryProvider, KeyringSecretStore,
+        OpenAiCompatibleProvider, OpenRouterProvider, ReqwestChatCompletionsTransport, SecretStore,
+        StoryAiProvider,
+    },
     rules::RuleDefinition,
     runtime::{RuleEvaluationInput, RuleEvaluationResult, RuntimeEngine},
     worldbook::{ActiveLoreEntry, WorldBookEntry},
 };
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedExternalProviderSettings {
+    base_url: String,
+    model: String,
+}
+
+impl Default for PersistedExternalProviderSettings {
+    fn default() -> Self {
+        Self {
+            base_url: String::new(),
+            model: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PersistedAiSettings {
+    selected_provider: AiProviderKind,
+    openai_compatible: PersistedExternalProviderSettings,
+    openrouter: PersistedExternalProviderSettings,
+}
+
+impl Default for PersistedAiSettings {
+    fn default() -> Self {
+        Self {
+            selected_provider: AiProviderKind::Heuristic,
+            openai_compatible: PersistedExternalProviderSettings::default(),
+            openrouter: PersistedExternalProviderSettings {
+                base_url: "https://openrouter.ai/api/v1".into(),
+                model: String::new(),
+            },
+        }
+    }
+}
+
+impl PersistedAiSettings {
+    fn to_snapshot(&self, secret_store: &dyn SecretStore) -> AppResult<AppAiSettingsSnapshot> {
+        Ok(AppAiSettingsSnapshot {
+            selected_provider: self.selected_provider.clone(),
+            openai_compatible: ExternalProviderSettingsSnapshot {
+                base_url: self.openai_compatible.base_url.clone(),
+                model: self.openai_compatible.model.clone(),
+                has_api_key: secret_store
+                    .get_api_key(AiProviderKind::OpenAiCompatible)?
+                    .is_some(),
+            },
+            openrouter: ExternalProviderSettingsSnapshot {
+                base_url: self.openrouter.base_url.clone(),
+                model: self.openrouter.model.clone(),
+                has_api_key: secret_store.get_api_key(AiProviderKind::OpenRouter)?.is_some(),
+            },
+        })
+    }
+
+    fn apply_save(&mut self, input: &SaveAiSettingsInput, secret_store: &dyn SecretStore) -> AppResult<()> {
+        self.selected_provider = input.selected_provider.clone();
+        self.openai_compatible = normalize_external_settings(&input.openai_compatible);
+        self.openrouter = normalize_external_settings(&input.openrouter);
+
+        maybe_store_api_key(
+            secret_store,
+            AiProviderKind::OpenAiCompatible,
+            input.openai_compatible.api_key.as_deref(),
+        )?;
+        maybe_store_api_key(
+            secret_store,
+            AiProviderKind::OpenRouter,
+            input.openrouter.api_key.as_deref(),
+        )?;
+
+        Ok(())
+    }
+}
+
+fn normalize_external_settings(input: &ExternalProviderSettingsInput) -> PersistedExternalProviderSettings {
+    PersistedExternalProviderSettings {
+        base_url: normalize_base_url(&input.base_url),
+        model: input.model.trim().to_string(),
+    }
+}
+
+fn normalize_base_url(raw: &str) -> String {
+    raw.trim().trim_end_matches('/').to_string()
+}
+
+fn maybe_store_api_key(
+    secret_store: &dyn SecretStore,
+    provider: AiProviderKind,
+    api_key: Option<&str>,
+) -> AppResult<()> {
+    if let Some(api_key) = api_key.map(str::trim).filter(|value| !value.is_empty()) {
+        secret_store.set_api_key(provider, api_key)?;
+    }
+    Ok(())
+}
+
 pub struct ProjectStore {
     base_dir: PathBuf,
     provider: Arc<dyn StoryAiProvider>,
+    secret_store: Arc<dyn SecretStore>,
+    chat_transport: Arc<dyn ChatCompletionsTransport>,
+    ai_settings: PersistedAiSettings,
     projects: HashMap<String, NovelProject>,
     sessions: HashMap<String, SessionState>,
 }
 
 impl ProjectStore {
     pub fn new(base_dir: PathBuf) -> AppResult<Self> {
-        Self::with_provider(base_dir, Arc::new(HeuristicStoryProvider))
+        Self::with_services(
+            base_dir,
+            Arc::new(HeuristicStoryProvider),
+            Arc::new(KeyringSecretStore::default()),
+            Arc::new(ReqwestChatCompletionsTransport::default()),
+        )
     }
 
-    pub fn with_provider(base_dir: PathBuf, provider: Arc<dyn StoryAiProvider>) -> AppResult<Self> {
+    pub fn with_services(
+        base_dir: PathBuf,
+        provider: Arc<dyn StoryAiProvider>,
+        secret_store: Arc<dyn SecretStore>,
+        chat_transport: Arc<dyn ChatCompletionsTransport>,
+    ) -> AppResult<Self> {
         fs::create_dir_all(base_dir.join("projects"))?;
         fs::create_dir_all(base_dir.join("sessions"))?;
+
+        let settings_path = base_dir.join("ai-settings.json");
+        let ai_settings = if settings_path.exists() {
+            serde_json::from_str(&fs::read_to_string(&settings_path)?)?
+        } else {
+            PersistedAiSettings::default()
+        };
 
         Ok(Self {
             base_dir,
             provider,
+            secret_store,
+            chat_transport,
+            ai_settings,
             projects: HashMap::new(),
             sessions: HashMap::new(),
         })
@@ -52,6 +176,37 @@ impl ProjectStore {
     #[cfg(test)]
     pub fn reload(base_dir: PathBuf) -> AppResult<Self> {
         let mut store = Self::new(base_dir)?;
+        store.load_from_disk()?;
+        Ok(store)
+    }
+
+    #[cfg(test)]
+    pub fn with_secret_store(base_dir: PathBuf, secret_store: Arc<dyn SecretStore>) -> AppResult<Self> {
+        Self::with_services(
+            base_dir,
+            Arc::new(HeuristicStoryProvider),
+            secret_store,
+            Arc::new(ReqwestChatCompletionsTransport::default()),
+        )
+    }
+
+    #[cfg(test)]
+    pub fn with_secret_store_and_transport(
+        base_dir: PathBuf,
+        secret_store: Arc<dyn SecretStore>,
+        chat_transport: Arc<dyn ChatCompletionsTransport>,
+    ) -> AppResult<Self> {
+        Self::with_services(
+            base_dir,
+            Arc::new(HeuristicStoryProvider),
+            secret_store,
+            chat_transport,
+        )
+    }
+
+    #[cfg(test)]
+    pub fn reload_with_secret_store(base_dir: PathBuf, secret_store: Arc<dyn SecretStore>) -> AppResult<Self> {
+        let mut store = Self::with_secret_store(base_dir, secret_store)?;
         store.load_from_disk()?;
         Ok(store)
     }
@@ -97,6 +252,7 @@ impl ProjectStore {
     }
 
     pub fn build_story_package(&mut self, project_id: &str) -> AppResult<BuildStatus> {
+        let settings = self.get_ai_settings()?;
         let Some(project) = self.projects.get_mut(project_id) else {
             return Err(AppError::NotFound(project_id.to_string()));
         };
@@ -108,8 +264,16 @@ impl ProjectStore {
             error: None,
         };
 
-        let analyzer = Analyzer::new(self.provider.clone());
-        let extracted = analyzer.analyze(project)?;
+        let extracted = match settings.selected_provider {
+            AiProviderKind::Heuristic => {
+                let analyzer = Analyzer::new(self.provider.clone());
+                analyzer.analyze(project)?
+            }
+            AiProviderKind::OpenAiCompatible => OpenAiCompatibleProvider::new(self.chat_transport.clone())
+                .analyze(project, &settings, self.secret_store.as_ref())?,
+            AiProviderKind::OpenRouter => OpenRouterProvider::new(self.chat_transport.clone())
+                .analyze(project, &settings, self.secret_store.as_ref())?,
+        };
         project.character_cards = extracted.character_cards;
         project.worldbook_entries = extracted.worldbook_entries;
         project.rules = extracted.rules;
@@ -137,6 +301,22 @@ impl ProjectStore {
             .get(project_id)
             .map(|project| project.build_status.clone())
             .ok_or_else(|| AppError::NotFound(project_id.to_string()))
+    }
+
+    pub fn get_ai_settings(&self) -> AppResult<AppAiSettingsSnapshot> {
+        self.ai_settings.to_snapshot(self.secret_store.as_ref())
+    }
+
+    pub fn save_ai_settings(&mut self, input: SaveAiSettingsInput) -> AppResult<AppAiSettingsSnapshot> {
+        self.ai_settings.apply_save(&input, self.secret_store.as_ref())?;
+        self.persist_ai_settings()?;
+        self.get_ai_settings()
+    }
+
+    pub fn clear_provider_api_key(&mut self, provider: AiProviderKind) -> AppResult<AppAiSettingsSnapshot> {
+        self.secret_store.clear_api_key(provider)?;
+        self.persist_ai_settings()?;
+        self.get_ai_settings()
     }
 
     pub fn load_story_package(&self, project_id: &str) -> AppResult<StoryPackage> {
@@ -409,6 +589,16 @@ impl ProjectStore {
         Ok(())
     }
 
+    fn ai_settings_path(&self) -> PathBuf {
+        self.base_dir.join("ai-settings.json")
+    }
+
+    fn persist_ai_settings(&self) -> AppResult<()> {
+        let content = serde_json::to_string_pretty(&self.ai_settings)?;
+        fs::write(self.ai_settings_path(), content)?;
+        Ok(())
+    }
+
     #[cfg(test)]
     fn load_from_disk(&mut self) -> AppResult<()> {
         self.projects = load_objects::<NovelProject>(&self.base_dir.join("projects"))?;
@@ -502,9 +692,154 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, sync::Arc};
+
     use super::ProjectStore;
-    use crate::importer::split_novel_into_chapters;
+    use crate::{
+        importer::split_novel_into_chapters,
+        models::{
+            AiProviderKind, BuildStage, ExternalProviderSettingsInput, SaveAiSettingsInput,
+        },
+        provider::{FakeChatCompletionsTransport, InMemorySecretStore},
+    };
     use crate::worldbook::WorldBookInsertionMode;
+
+    fn default_ai_settings() -> SaveAiSettingsInput {
+        SaveAiSettingsInput {
+            selected_provider: AiProviderKind::OpenAiCompatible,
+            openai_compatible: ExternalProviderSettingsInput {
+                base_url: "https://example.com/v1/".into(),
+                model: "gpt-4o-mini".into(),
+                api_key: Some("sk-openai-test".into()),
+            },
+            openrouter: ExternalProviderSettingsInput {
+                base_url: "https://openrouter.ai/api/v1".into(),
+                model: "openai/gpt-4o-mini".into(),
+                api_key: None,
+            },
+        }
+    }
+
+    fn openrouter_settings() -> SaveAiSettingsInput {
+        SaveAiSettingsInput {
+            selected_provider: AiProviderKind::OpenRouter,
+            openai_compatible: ExternalProviderSettingsInput::default(),
+            openrouter: ExternalProviderSettingsInput {
+                base_url: "https://openrouter.ai/api/v1/".into(),
+                model: "openai/gpt-4o-mini".into(),
+                api_key: Some("sk-openrouter-test".into()),
+            },
+        }
+    }
+
+    fn external_analysis_response() -> String {
+        let draft = serde_json::json!({
+            "story_bible": {
+                "title": "临川夜话",
+                "characters": [
+                    {
+                        "id": "character-1",
+                        "name": "沈砚",
+                        "gender": "male",
+                        "age": 22,
+                        "identity": "守门人",
+                        "faction": "临川城",
+                        "role": "主视角",
+                        "summary": "守门人",
+                        "desire": "知道真相",
+                        "secrets": ["知道北门的代价"],
+                        "traits": ["克制"],
+                        "abilities": ["守门"],
+                        "mutable_state": {"trust": "1"}
+                    }
+                ],
+                "locations": [
+                    { "id": "location-1", "name": "临川城", "summary": "雨夜中的城" }
+                ],
+                "timeline": [
+                    { "id": "timeline-1", "label": "第1章 雨夜来客", "order": 1, "summary": "提灯而来" }
+                ],
+                "world_rules": [
+                    { "id": "rule-1", "description": "午夜之后绝不能打开北门" }
+                ],
+                "relationships": [],
+                "core_conflicts": [
+                    { "id": "conflict-1", "title": "秩序与真相", "summary": "在规训与真相间选择" }
+                ]
+            },
+            "character_cards": [
+                {
+                    "name": "沈砚",
+                    "gender": "male",
+                    "age": 22,
+                    "identity": "守门人",
+                    "faction": "临川城",
+                    "role": "主视角",
+                    "summary": "守门人",
+                    "desire": "知道真相",
+                    "secrets": ["知道北门的代价"],
+                    "traits": ["克制"],
+                    "abilities": ["守门"],
+                    "mutable_state": {"trust": "1"}
+                }
+            ],
+            "worldbook_entries": [
+                {
+                    "title": "北门禁令",
+                    "category": "social_rule",
+                    "content": "午夜之后绝不能打开北门。",
+                    "enabled": true,
+                    "keys": ["北门"],
+                    "secondary_keys": ["午夜"],
+                    "selective_logic": "and_any",
+                    "constant": false,
+                    "recursive": false,
+                    "exclude_recursion": false,
+                    "prevent_recursion": false,
+                    "delay_until_recursion": null,
+                    "scan_depth": 4,
+                    "case_sensitive": false,
+                    "match_whole_words": false,
+                    "sticky": null,
+                    "cooldown": null,
+                    "delay": null,
+                    "triggers": ["scene"],
+                    "ignore_budget": false,
+                    "order": 10,
+                    "insertion_mode": "rules_guard",
+                    "source": "llm",
+                    "rule_binding": null
+                }
+            ],
+            "rules": [
+                {
+                    "name": "north-gate-midnight-forbidden",
+                    "category": "social_rule",
+                    "priority": "hard_constraint",
+                    "enabled": true,
+                    "conditions": [
+                        { "fact": "event.kind", "operator": "equals", "value": "open_gate" }
+                    ],
+                    "blockers": [],
+                    "effects": [
+                        { "key": "event.forbidden", "value": "true" }
+                    ],
+                    "explanation": "午夜之后绝不能打开北门"
+                }
+            ]
+        });
+
+        serde_json::json!({
+            "choices": [
+                {
+                    "message": {
+                        "content": draft.to_string()
+                    }
+                }
+            ]
+        })
+        .to_string()
+    }
 
     fn sample_novel() -> String {
         [
@@ -747,5 +1082,161 @@ mod tests {
         let payload = store.get_current_scene(&session_id).expect("scene after reload");
         assert!(!payload.scene.title.is_empty());
         assert!(!payload.story_state.current_scene_id.is_empty());
+    }
+
+    #[test]
+    fn ai_settings_default_to_heuristic_and_persist_without_api_key_in_json() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let secrets = Arc::new(InMemorySecretStore::default());
+        let mut store = ProjectStore::with_secret_store(dir.path().to_path_buf(), secrets.clone()).expect("store");
+
+        let initial = store.get_ai_settings().expect("initial settings");
+        assert_eq!(initial.selected_provider, AiProviderKind::Heuristic);
+        assert!(!initial.openai_compatible.has_api_key);
+        assert!(!initial.openrouter.has_api_key);
+
+        let saved = store
+            .save_ai_settings(default_ai_settings())
+            .expect("save settings");
+        assert_eq!(saved.selected_provider, AiProviderKind::OpenAiCompatible);
+        assert_eq!(saved.openai_compatible.base_url, "https://example.com/v1");
+        assert!(saved.openai_compatible.has_api_key);
+
+        let persisted = fs::read_to_string(dir.path().join("ai-settings.json")).expect("settings file");
+        assert!(persisted.contains("gpt-4o-mini"));
+        assert!(!persisted.contains("sk-openai-test"));
+
+        let reloaded = ProjectStore::reload_with_secret_store(dir.path().to_path_buf(), secrets)
+            .expect("reload");
+        let reloaded_settings = reloaded.get_ai_settings().expect("reloaded settings");
+        assert_eq!(reloaded_settings.selected_provider, AiProviderKind::OpenAiCompatible);
+        assert_eq!(reloaded_settings.openai_compatible.base_url, "https://example.com/v1");
+        assert!(reloaded_settings.openai_compatible.has_api_key);
+    }
+
+    #[test]
+    fn clearing_provider_api_key_preserves_non_secret_settings_and_updates_snapshot() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let secrets = Arc::new(InMemorySecretStore::default());
+        let mut store = ProjectStore::with_secret_store(dir.path().to_path_buf(), secrets).expect("store");
+        store
+            .save_ai_settings(default_ai_settings())
+            .expect("save settings");
+
+        let cleared = store
+            .clear_provider_api_key(AiProviderKind::OpenAiCompatible)
+            .expect("clear key");
+        assert_eq!(cleared.selected_provider, AiProviderKind::OpenAiCompatible);
+        assert_eq!(cleared.openai_compatible.model, "gpt-4o-mini");
+        assert!(!cleared.openai_compatible.has_api_key);
+        assert_eq!(cleared.openrouter.base_url, "https://openrouter.ai/api/v1");
+    }
+
+    #[test]
+    fn build_story_package_uses_openai_compatible_provider_request_shape() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let secrets = Arc::new(InMemorySecretStore::default());
+        let transport = Arc::new(FakeChatCompletionsTransport::from_responses(vec![
+            Ok(external_analysis_response()),
+        ]));
+        let mut store = ProjectStore::with_secret_store_and_transport(
+            dir.path().to_path_buf(),
+            secrets,
+            transport.clone(),
+        )
+        .expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.save_ai_settings(default_ai_settings()).expect("settings");
+
+        let status = store.build_story_package(&project.id).expect("build");
+        assert_eq!(status.stage, BuildStage::Ready);
+
+        let requests = transport.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].url, "https://example.com/v1/chat/completions");
+        assert_eq!(requests[0].body["model"], "gpt-4o-mini");
+        assert_eq!(
+            requests[0].headers.get("authorization").map(String::as_str),
+            Some("Bearer sk-openai-test")
+        );
+        assert!(!requests[0].headers.contains_key("x-title"));
+    }
+
+    #[test]
+    fn build_story_package_uses_openrouter_headers_and_retries_invalid_json_once() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let secrets = Arc::new(InMemorySecretStore::default());
+        let transport = Arc::new(FakeChatCompletionsTransport::from_responses(vec![
+            Ok("not-json".into()),
+            Ok(external_analysis_response()),
+        ]));
+        let mut store = ProjectStore::with_secret_store_and_transport(
+            dir.path().to_path_buf(),
+            secrets,
+            transport.clone(),
+        )
+        .expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.save_ai_settings(openrouter_settings()).expect("settings");
+
+        store.build_story_package(&project.id).expect("build");
+
+        let requests = transport.requests();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].url, "https://openrouter.ai/api/v1/chat/completions");
+        assert_eq!(
+            requests[0].headers.get("authorization").map(String::as_str),
+            Some("Bearer sk-openrouter-test")
+        );
+        assert_eq!(
+            requests[0].headers.get("x-title").map(String::as_str),
+            Some("叙世者")
+        );
+    }
+
+    #[test]
+    fn build_story_package_rejects_external_provider_without_api_key() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let secrets = Arc::new(InMemorySecretStore::default());
+        let transport = Arc::new(FakeChatCompletionsTransport::default());
+        let mut store = ProjectStore::with_secret_store_and_transport(
+            dir.path().to_path_buf(),
+            secrets,
+            transport,
+        )
+        .expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store
+            .save_ai_settings(SaveAiSettingsInput {
+                selected_provider: AiProviderKind::OpenAiCompatible,
+                openai_compatible: ExternalProviderSettingsInput {
+                    base_url: "https://example.com/v1".into(),
+                    model: "gpt-4o-mini".into(),
+                    api_key: None,
+                },
+                openrouter: ExternalProviderSettingsInput {
+                    base_url: "https://openrouter.ai/api/v1".into(),
+                    model: String::new(),
+                    api_key: None,
+                },
+            })
+            .expect("settings");
+
+        let error = store
+            .build_story_package(&project.id)
+            .expect_err("missing key should fail");
+        assert!(error.to_string().contains("API key"));
     }
 }

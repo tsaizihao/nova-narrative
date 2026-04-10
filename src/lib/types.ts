@@ -1,10 +1,36 @@
 export type BuildStage = 'created' | 'imported' | 'analyzing' | 'compiling' | 'ready' | 'failed';
 
+export type AiProviderKind = 'heuristic' | 'openai_compatible' | 'openrouter';
+
 export interface BuildStatus {
   stage: BuildStage;
   message: string;
   progress: number;
   error?: string | null;
+}
+
+export interface ExternalProviderSettingsSnapshot {
+  base_url: string;
+  model: string;
+  has_api_key: boolean;
+}
+
+export interface AppAiSettingsSnapshot {
+  selected_provider: AiProviderKind;
+  openai_compatible: ExternalProviderSettingsSnapshot;
+  openrouter: ExternalProviderSettingsSnapshot;
+}
+
+export interface ExternalProviderSettingsInput {
+  base_url: string;
+  model: string;
+  api_key?: string | null;
+}
+
+export interface SaveAiSettingsInput {
+  selected_provider: AiProviderKind;
+  openai_compatible: ExternalProviderSettingsInput;
+  openrouter: ExternalProviderSettingsInput;
 }
 
 export interface ChapterChunk {

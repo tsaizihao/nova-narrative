@@ -16,5 +16,8 @@ pub enum AppError {
     RuleViolation(String),
     #[error("validation error: {0}")]
     Validation(String),
+    #[error("provider error: {0}")]
+    Provider(String),
+    #[error("secret store error: {0}")]
+    SecretStore(String),
 }
-

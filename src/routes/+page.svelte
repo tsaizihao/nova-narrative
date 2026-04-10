@@ -12,12 +12,15 @@
   import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
   import type {
+    AiProviderKind,
     ActiveLoreEntry,
+    AppAiSettingsSnapshot,
     BuildStatus,
     CharacterCard,
     NovelProject,
     RuleDefinition,
     RuleEvaluationResult,
+    SaveAiSettingsInput,
     ScenePayload,
     SessionState,
     StoryCodex,
@@ -47,9 +50,119 @@
   let error = '';
   let freeInput = '';
   let busy = false;
+  let settingsBusy = false;
+  let aiSettings: AppAiSettingsSnapshot = {
+    selected_provider: 'heuristic',
+    openai_compatible: {
+      base_url: '',
+      model: '',
+      has_api_key: false
+    },
+    openrouter: {
+      base_url: 'https://openrouter.ai/api/v1',
+      model: '',
+      has_api_key: false
+    }
+  };
+  let aiDraft: SaveAiSettingsInput = {
+    selected_provider: 'heuristic',
+    openai_compatible: {
+      base_url: '',
+      model: '',
+      api_key: ''
+    },
+    openrouter: {
+      base_url: 'https://openrouter.ai/api/v1',
+      model: '',
+      api_key: ''
+    }
+  };
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
   const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
+
+  function syncAiDraft(snapshot: AppAiSettingsSnapshot) {
+    aiDraft = {
+      selected_provider: snapshot.selected_provider,
+      openai_compatible: {
+        base_url: snapshot.openai_compatible.base_url,
+        model: snapshot.openai_compatible.model,
+        api_key: ''
+      },
+      openrouter: {
+        base_url: snapshot.openrouter.base_url || 'https://openrouter.ai/api/v1',
+        model: snapshot.openrouter.model,
+        api_key: ''
+      }
+    };
+  }
+
+  async function loadAiSettings() {
+    aiSettings = await api.getAiSettings();
+    syncAiDraft(aiSettings);
+  }
+
+  function updateAiProvider(provider: AiProviderKind) {
+    aiDraft = {
+      ...aiDraft,
+      selected_provider: provider,
+      openrouter: {
+        ...aiDraft.openrouter,
+        base_url: aiDraft.openrouter.base_url || 'https://openrouter.ai/api/v1'
+      }
+    };
+  }
+
+  function updateActiveAiField(field: 'base_url' | 'model' | 'api_key', value: string) {
+    if (aiDraft.selected_provider === 'openrouter') {
+      aiDraft = {
+        ...aiDraft,
+        openrouter: {
+          ...aiDraft.openrouter,
+          [field]: value
+        }
+      };
+      return;
+    }
+
+    aiDraft = {
+      ...aiDraft,
+      openai_compatible: {
+        ...aiDraft.openai_compatible,
+        [field]: value
+      }
+    };
+  }
+
+  async function persistAiSettings() {
+    settingsBusy = true;
+    error = '';
+
+    try {
+      aiSettings = await api.saveAiSettings(aiDraft);
+      syncAiDraft(aiSettings);
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : '保存 AI 接口设置失败';
+    } finally {
+      settingsBusy = false;
+    }
+  }
+
+  async function clearProviderApiKey(provider: AiProviderKind) {
+    if (provider === 'heuristic') return;
+
+    settingsBusy = true;
+    error = '';
+
+    try {
+      aiSettings = await api.clearProviderApiKey(provider);
+      syncAiDraft(aiSettings);
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : '清除 API key 失败';
+    } finally {
+      settingsBusy = false;
+    }
+  }
 
   async function refreshCodex(sessionId: string) {
     codex = await api.getStoryCodex(sessionId);
@@ -281,6 +394,9 @@
       readerLayoutMode = resolveReaderLayoutMode(window.innerWidth);
     };
 
+    void loadAiSettings().catch((caught) => {
+      error = caught instanceof Error ? caught.message : '加载 AI 设置失败';
+    });
     updateReaderLayout();
     window.addEventListener('resize', updateReaderLayout);
 
@@ -313,10 +429,19 @@
       {novelText}
       {busy}
       {error}
+      {aiSettings}
+      {aiDraft}
+      {settingsBusy}
       on:submit={initializeStory}
       on:sample={fillSample}
       on:updateProjectName={(event) => (projectName = event.detail)}
       on:updateNovelText={(event) => (novelText = event.detail)}
+      on:updateAiProvider={(event) => updateAiProvider(event.detail)}
+      on:updateAiBaseUrl={(event) => updateActiveAiField('base_url', event.detail)}
+      on:updateAiModel={(event) => updateActiveAiField('model', event.detail)}
+      on:updateAiApiKey={(event) => updateActiveAiField('api_key', event.detail)}
+      on:saveAiSettings={persistAiSettings}
+      on:clearProviderApiKey={(event) => clearProviderApiKey(event.detail)}
     />
   {:else if phase === 'building'}
     <BuildProgressScreen projectName={project?.name ?? projectName} {buildStatus} />

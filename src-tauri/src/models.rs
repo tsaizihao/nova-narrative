@@ -20,12 +20,87 @@ pub enum BuildStage {
     Failed,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AiProviderKind {
+    #[default]
+    Heuristic,
+    OpenAiCompatible,
+    OpenRouter,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BuildStatus {
     pub stage: BuildStage,
     pub message: String,
     pub progress: u8,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExternalProviderSettingsSnapshot {
+    pub base_url: String,
+    pub model: String,
+    pub has_api_key: bool,
+}
+
+impl Default for ExternalProviderSettingsSnapshot {
+    fn default() -> Self {
+        Self {
+            base_url: String::new(),
+            model: String::new(),
+            has_api_key: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AppAiSettingsSnapshot {
+    pub selected_provider: AiProviderKind,
+    pub openai_compatible: ExternalProviderSettingsSnapshot,
+    pub openrouter: ExternalProviderSettingsSnapshot,
+}
+
+impl Default for AppAiSettingsSnapshot {
+    fn default() -> Self {
+        Self {
+            selected_provider: AiProviderKind::Heuristic,
+            openai_compatible: ExternalProviderSettingsSnapshot::default(),
+            openrouter: ExternalProviderSettingsSnapshot {
+                base_url: "https://openrouter.ai/api/v1".into(),
+                model: String::new(),
+                has_api_key: false,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ExternalProviderSettingsInput {
+    pub base_url: String,
+    pub model: String,
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SaveAiSettingsInput {
+    pub selected_provider: AiProviderKind,
+    pub openai_compatible: ExternalProviderSettingsInput,
+    pub openrouter: ExternalProviderSettingsInput,
+}
+
+impl Default for SaveAiSettingsInput {
+    fn default() -> Self {
+        Self {
+            selected_provider: AiProviderKind::Heuristic,
+            openai_compatible: ExternalProviderSettingsInput::default(),
+            openrouter: ExternalProviderSettingsInput {
+                base_url: "https://openrouter.ai/api/v1".into(),
+                model: String::new(),
+                api_key: None,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

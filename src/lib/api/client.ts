@@ -2,12 +2,15 @@ import { invoke } from '@tauri-apps/api/core';
 
 import { mockBackend } from '$lib/mock-backend';
 import type {
+  AiProviderKind,
   ActiveLoreEntry,
+  AppAiSettingsSnapshot,
   BuildStatus,
   EndingReport,
   NovelProject,
   RuleDefinition,
   RuleEvaluationResult,
+  SaveAiSettingsInput,
   ScenePayload,
   SessionState,
   StoryCodex,
@@ -24,6 +27,12 @@ async function desktopInvoke<T>(command: string, args?: Record<string, unknown>)
   }
 
   switch (command) {
+    case 'get_ai_settings':
+      return mockBackend.get_ai_settings() as Promise<T>;
+    case 'save_ai_settings':
+      return mockBackend.save_ai_settings(args?.input as SaveAiSettingsInput) as Promise<T>;
+    case 'clear_provider_api_key':
+      return mockBackend.clear_provider_api_key(args?.providerKind as AiProviderKind) as Promise<T>;
     case 'create_project':
       return mockBackend.create_project(args?.name as string) as Promise<T>;
     case 'import_novel_text':
@@ -93,6 +102,15 @@ async function desktopInvoke<T>(command: string, args?: Record<string, unknown>)
 }
 
 export const api = {
+  getAiSettings() {
+    return desktopInvoke<AppAiSettingsSnapshot>('get_ai_settings');
+  },
+  saveAiSettings(input: SaveAiSettingsInput) {
+    return desktopInvoke<AppAiSettingsSnapshot>('save_ai_settings', { input });
+  },
+  clearProviderApiKey(providerKind: AiProviderKind) {
+    return desktopInvoke<AppAiSettingsSnapshot>('clear_provider_api_key', { providerKind });
+  },
   createProject(name: string) {
     return desktopInvoke<NovelProject>('create_project', { name });
   },

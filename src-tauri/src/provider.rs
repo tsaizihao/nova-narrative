@@ -1,12 +1,19 @@
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    sync::Arc,
+};
+
+#[cfg(test)]
+use std::{collections::VecDeque, sync::Mutex};
 
 use regex::Regex;
+use serde::Deserialize;
 
 use crate::{
-    error::AppResult,
+    error::{AppError, AppResult},
     models::{
-        CharacterCard, CoreConflict, LocationCard, NovelProject, RelationshipEdge, StoryBible,
-        TimelineEntry, WorldRule,
+        AiProviderKind, AppAiSettingsSnapshot, CharacterCard, CoreConflict, LocationCard,
+        NovelProject, RelationshipEdge, StoryBible, TimelineEntry, WorldRule,
     },
     rules::{RuleCondition, RuleDefinition, RuleEffect, RuleOperator, RulePriority},
     worldbook::{
@@ -21,8 +28,770 @@ pub struct ExtractedWorldModel {
     pub story_bible: StoryBible,
 }
 
+pub trait SecretStore: Send + Sync {
+    fn get_api_key(&self, provider: AiProviderKind) -> AppResult<Option<String>>;
+    fn set_api_key(&self, provider: AiProviderKind, api_key: &str) -> AppResult<()>;
+    fn clear_api_key(&self, provider: AiProviderKind) -> AppResult<()>;
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub struct InMemorySecretStore {
+    values: Mutex<HashMap<String, String>>,
+}
+
+#[cfg(test)]
+impl SecretStore for InMemorySecretStore {
+    fn get_api_key(&self, provider: AiProviderKind) -> AppResult<Option<String>> {
+        let values = self
+            .values
+            .lock()
+            .map_err(|_| AppError::SecretStore("failed to lock in-memory secret store".into()))?;
+        Ok(values.get(provider_key(&provider)).cloned())
+    }
+
+    fn set_api_key(&self, provider: AiProviderKind, api_key: &str) -> AppResult<()> {
+        let mut values = self
+            .values
+            .lock()
+            .map_err(|_| AppError::SecretStore("failed to lock in-memory secret store".into()))?;
+        values.insert(provider_key(&provider).into(), api_key.to_string());
+        Ok(())
+    }
+
+    fn clear_api_key(&self, provider: AiProviderKind) -> AppResult<()> {
+        let mut values = self
+            .values
+            .lock()
+            .map_err(|_| AppError::SecretStore("failed to lock in-memory secret store".into()))?;
+        values.remove(provider_key(&provider));
+        Ok(())
+    }
+}
+
+pub struct KeyringSecretStore {
+    service_name: String,
+}
+
+impl Default for KeyringSecretStore {
+    fn default() -> Self {
+        Self {
+            service_name: "com.nova.narrative.ai".into(),
+        }
+    }
+}
+
+impl KeyringSecretStore {
+    fn entry(&self, provider: &AiProviderKind) -> AppResult<keyring::Entry> {
+        keyring::Entry::new(&self.service_name, provider_key(provider))
+            .map_err(|error| AppError::SecretStore(error.to_string()))
+    }
+}
+
+impl SecretStore for KeyringSecretStore {
+    fn get_api_key(&self, provider: AiProviderKind) -> AppResult<Option<String>> {
+        let entry = self.entry(&provider)?;
+        match entry.get_password() {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(error) => Err(AppError::SecretStore(error.to_string())),
+        }
+    }
+
+    fn set_api_key(&self, provider: AiProviderKind, api_key: &str) -> AppResult<()> {
+        let entry = self.entry(&provider)?;
+        entry
+            .set_password(api_key)
+            .map_err(|error| AppError::SecretStore(error.to_string()))
+    }
+
+    fn clear_api_key(&self, provider: AiProviderKind) -> AppResult<()> {
+        let entry = self.entry(&provider)?;
+        match entry.delete_credential() {
+            Ok(_) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(AppError::SecretStore(error.to_string())),
+        }
+    }
+}
+
+fn provider_key(provider: &AiProviderKind) -> &'static str {
+    match provider {
+        AiProviderKind::Heuristic => "heuristic",
+        AiProviderKind::OpenAiCompatible => "openai_compatible",
+        AiProviderKind::OpenRouter => "openrouter",
+    }
+}
+
 pub trait StoryAiProvider: Send + Sync {
     fn analyze(&self, project: &NovelProject) -> AppResult<ExtractedWorldModel>;
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatCompletionsRequest {
+    pub url: String,
+    pub headers: BTreeMap<String, String>,
+    pub body: serde_json::Value,
+}
+
+pub trait ChatCompletionsTransport: Send + Sync {
+    fn execute(&self, request: ChatCompletionsRequest) -> AppResult<String>;
+}
+
+pub struct ReqwestChatCompletionsTransport {
+    client: reqwest::blocking::Client,
+}
+
+impl Default for ReqwestChatCompletionsTransport {
+    fn default() -> Self {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("reqwest client should build");
+        Self { client }
+    }
+}
+
+impl ChatCompletionsTransport for ReqwestChatCompletionsTransport {
+    fn execute(&self, request: ChatCompletionsRequest) -> AppResult<String> {
+        let mut builder = self.client.post(&request.url);
+        for (key, value) in &request.headers {
+            builder = builder.header(key, value);
+        }
+
+        let response = builder
+            .json(&request.body)
+            .send()
+            .and_then(reqwest::blocking::Response::error_for_status)
+            .map_err(|error| AppError::Provider(error.to_string()))?;
+
+        response
+            .text()
+            .map_err(|error| AppError::Provider(error.to_string()))
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone)]
+pub struct CapturedChatCompletionsRequest {
+    pub url: String,
+    pub headers: BTreeMap<String, String>,
+    pub body: serde_json::Value,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub struct FakeChatCompletionsTransport {
+    requests: Mutex<Vec<CapturedChatCompletionsRequest>>,
+    responses: Mutex<VecDeque<Result<String, String>>>,
+}
+
+#[cfg(test)]
+impl FakeChatCompletionsTransport {
+    pub fn from_responses(responses: Vec<Result<String, String>>) -> Self {
+        Self {
+            requests: Mutex::new(Vec::new()),
+            responses: Mutex::new(responses.into()),
+        }
+    }
+
+    pub fn requests(&self) -> Vec<CapturedChatCompletionsRequest> {
+        self.requests
+            .lock()
+            .expect("requests lock")
+            .clone()
+    }
+}
+
+#[cfg(test)]
+impl ChatCompletionsTransport for FakeChatCompletionsTransport {
+    fn execute(&self, request: ChatCompletionsRequest) -> AppResult<String> {
+        self.requests
+            .lock()
+            .map_err(|_| AppError::Provider("failed to capture fake transport request".into()))?
+            .push(CapturedChatCompletionsRequest {
+                url: request.url,
+                headers: request.headers,
+                body: request.body,
+            });
+
+        let next = self
+            .responses
+            .lock()
+            .map_err(|_| AppError::Provider("failed to lock fake transport responses".into()))?
+            .pop_front()
+            .unwrap_or_else(|| Err("no fake response queued".into()));
+
+        next.map_err(AppError::Provider)
+    }
+}
+
+pub struct OpenAiCompatibleProvider {
+    transport: Arc<dyn ChatCompletionsTransport>,
+}
+
+impl OpenAiCompatibleProvider {
+    pub fn new(transport: Arc<dyn ChatCompletionsTransport>) -> Self {
+        Self { transport }
+    }
+
+    pub fn analyze(
+        &self,
+        project: &NovelProject,
+        settings: &AppAiSettingsSnapshot,
+        secret_store: &dyn SecretStore,
+    ) -> AppResult<ExtractedWorldModel> {
+        analyze_external_provider(
+            project,
+            settings,
+            secret_store,
+            AiProviderKind::OpenAiCompatible,
+            self.transport.as_ref(),
+        )
+    }
+}
+
+pub struct OpenRouterProvider {
+    transport: Arc<dyn ChatCompletionsTransport>,
+}
+
+impl OpenRouterProvider {
+    pub fn new(transport: Arc<dyn ChatCompletionsTransport>) -> Self {
+        Self { transport }
+    }
+
+    pub fn analyze(
+        &self,
+        project: &NovelProject,
+        settings: &AppAiSettingsSnapshot,
+        secret_store: &dyn SecretStore,
+    ) -> AppResult<ExtractedWorldModel> {
+        analyze_external_provider(
+            project,
+            settings,
+            secret_store,
+            AiProviderKind::OpenRouter,
+            self.transport.as_ref(),
+        )
+    }
+}
+
+fn analyze_external_provider(
+    project: &NovelProject,
+    settings: &AppAiSettingsSnapshot,
+    secret_store: &dyn SecretStore,
+    provider_kind: AiProviderKind,
+    transport: &dyn ChatCompletionsTransport,
+) -> AppResult<ExtractedWorldModel> {
+    let provider_settings = match provider_kind {
+        AiProviderKind::OpenAiCompatible => &settings.openai_compatible,
+        AiProviderKind::OpenRouter => &settings.openrouter,
+        AiProviderKind::Heuristic => {
+            return Err(AppError::Validation(
+                "heuristic provider does not use external API settings".into(),
+            ))
+        }
+    };
+
+    if provider_settings.base_url.trim().is_empty() {
+        return Err(AppError::Validation("External provider base URL is required".into()));
+    }
+    if provider_settings.model.trim().is_empty() {
+        return Err(AppError::Validation("External provider model is required".into()));
+    }
+
+    let api_key = secret_store
+        .get_api_key(provider_kind.clone())?
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AppError::Validation("External provider API key is required".into()))?;
+
+    let request = build_chat_request(project, provider_kind, provider_settings, &api_key);
+    let mut last_error = None;
+
+    for attempt in 0..2 {
+        let raw_response = transport.execute(request.clone())?;
+        match parse_external_analysis(project, &raw_response) {
+            Ok(model) => return Ok(model),
+            Err(error) if attempt == 0 => last_error = Some(error),
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| AppError::Provider("failed to parse provider response".into())))
+}
+
+fn build_chat_request(
+    project: &NovelProject,
+    provider_kind: AiProviderKind,
+    provider_settings: &crate::models::ExternalProviderSettingsSnapshot,
+    api_key: &str,
+) -> ChatCompletionsRequest {
+    let mut headers = BTreeMap::from([
+        ("authorization".into(), format!("Bearer {api_key}")),
+        ("content-type".into(), "application/json".into()),
+    ]);
+
+    if provider_kind == AiProviderKind::OpenRouter {
+        headers.insert("x-title".into(), "叙世者".into());
+    }
+
+    let url = format!("{}/chat/completions", provider_settings.base_url);
+    let body = serde_json::json!({
+        "model": provider_settings.model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "你是中文小说互动改编助手。请只返回一个 JSON 对象，不要输出 markdown、解释或代码块。"
+            },
+            {
+                "role": "user",
+                "content": build_analysis_prompt(project)
+            }
+        ]
+    });
+
+    ChatCompletionsRequest { url, headers, body }
+}
+
+fn build_analysis_prompt(project: &NovelProject) -> String {
+    format!(
+        concat!(
+            "请从下面的中文小说文本中抽取结构化故事模型，",
+            "并只返回 JSON，对象字段必须包含 story_bible、character_cards、worldbook_entries、rules。\n\n",
+            "story_bible 需要包含 title、characters、locations、timeline、world_rules、relationships、core_conflicts。\n",
+            "character_cards 需要包含 name、gender、age、identity、faction、role、summary、desire、secrets、traits、abilities、mutable_state。\n",
+            "worldbook_entries 需要包含 title、category、content、enabled、keys、secondary_keys、selective_logic、constant、recursive、exclude_recursion、prevent_recursion、delay_until_recursion、scan_depth、case_sensitive、match_whole_words、sticky、cooldown、delay、triggers、ignore_budget、order、insertion_mode、source、rule_binding。\n",
+            "rules 需要包含 name、category、priority、enabled、conditions、blockers、effects、explanation。\n",
+            "如果字段未知，请给出合理默认值，不要省略对象本身。\n\n",
+            "项目名：{name}\n\n小说正文：\n{text}"
+        ),
+        name = project.name,
+        text = project.raw_text
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatCompletionEnvelope {
+    choices: Vec<ChatCompletionChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatCompletionChoice {
+    message: ChatCompletionMessage,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatCompletionMessage {
+    content: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct AiAnalysisDraft {
+    #[serde(default)]
+    story_bible: StoryBibleDraft,
+    #[serde(default)]
+    character_cards: Vec<CharacterCardDraft>,
+    #[serde(default)]
+    worldbook_entries: Vec<WorldBookEntryDraft>,
+    #[serde(default)]
+    rules: Vec<RuleDefinitionDraft>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct StoryBibleDraft {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    characters: Vec<CharacterCardDraft>,
+    #[serde(default)]
+    locations: Vec<LocationCard>,
+    #[serde(default)]
+    timeline: Vec<TimelineEntry>,
+    #[serde(default)]
+    world_rules: Vec<WorldRule>,
+    #[serde(default)]
+    relationships: Vec<RelationshipEdge>,
+    #[serde(default)]
+    core_conflicts: Vec<CoreConflict>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CharacterCardDraft {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    gender: String,
+    age: Option<u16>,
+    #[serde(default)]
+    identity: String,
+    #[serde(default)]
+    faction: String,
+    #[serde(default)]
+    role: String,
+    #[serde(default)]
+    summary: String,
+    #[serde(default)]
+    desire: String,
+    #[serde(default)]
+    secrets: Vec<String>,
+    #[serde(default)]
+    traits: Vec<String>,
+    #[serde(default)]
+    abilities: Vec<String>,
+    #[serde(default)]
+    mutable_state: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct WorldBookEntryDraft {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    category: WorldBookCategory,
+    #[serde(default)]
+    content: String,
+    enabled: Option<bool>,
+    #[serde(default)]
+    keys: Vec<String>,
+    #[serde(default)]
+    secondary_keys: Vec<String>,
+    #[serde(default)]
+    selective_logic: WorldBookSelectiveLogic,
+    constant: Option<bool>,
+    recursive: Option<bool>,
+    exclude_recursion: Option<bool>,
+    prevent_recursion: Option<bool>,
+    delay_until_recursion: Option<u8>,
+    scan_depth: Option<usize>,
+    case_sensitive: Option<bool>,
+    match_whole_words: Option<bool>,
+    sticky: Option<u16>,
+    cooldown: Option<u16>,
+    delay: Option<u16>,
+    #[serde(default)]
+    triggers: Vec<String>,
+    ignore_budget: Option<bool>,
+    order: Option<i32>,
+    #[serde(default)]
+    insertion_mode: WorldBookInsertionMode,
+    #[serde(default)]
+    source: String,
+    rule_binding: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RuleDefinitionDraft {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    category: String,
+    #[serde(default)]
+    priority: RulePriority,
+    enabled: Option<bool>,
+    #[serde(default)]
+    conditions: Vec<RuleCondition>,
+    #[serde(default)]
+    blockers: Vec<RuleCondition>,
+    #[serde(default)]
+    effects: Vec<RuleEffect>,
+    #[serde(default)]
+    explanation: String,
+}
+
+fn parse_external_analysis(project: &NovelProject, raw_response: &str) -> AppResult<ExtractedWorldModel> {
+    let envelope: ChatCompletionEnvelope =
+        serde_json::from_str(raw_response).map_err(|error| AppError::Provider(error.to_string()))?;
+    let content = envelope
+        .choices
+        .first()
+        .map(|choice| choice.message.content.as_str())
+        .ok_or_else(|| AppError::Provider("provider response did not include any choices".into()))?;
+
+    let draft_json = unwrap_json_payload(content);
+    let draft: AiAnalysisDraft =
+        serde_json::from_str(draft_json).map_err(|error| AppError::Provider(error.to_string()))?;
+
+    materialize_analysis(project, draft)
+}
+
+fn unwrap_json_payload(content: &str) -> &str {
+    let trimmed = content.trim();
+    if let Some(inner) = trimmed.strip_prefix("```json").and_then(|value| value.strip_suffix("```")) {
+        inner.trim()
+    } else if let Some(inner) = trimmed.strip_prefix("```").and_then(|value| value.strip_suffix("```")) {
+        inner.trim()
+    } else {
+        trimmed
+    }
+}
+
+fn materialize_analysis(project: &NovelProject, draft: AiAnalysisDraft) -> AppResult<ExtractedWorldModel> {
+    let character_cards = materialize_character_cards(&draft.character_cards, &draft.story_bible.characters)?;
+    if character_cards.is_empty() {
+        return Err(AppError::Provider("provider response did not include any character cards".into()));
+    }
+
+    let worldbook_entries = materialize_worldbook_entries(draft.worldbook_entries)?;
+    if worldbook_entries.is_empty() {
+        return Err(AppError::Provider("provider response did not include any worldbook entries".into()));
+    }
+
+    let rules = materialize_rules(draft.rules)?;
+    if rules.is_empty() {
+        return Err(AppError::Provider("provider response did not include any rules".into()));
+    }
+
+    let story_bible = StoryBible {
+        title: if draft.story_bible.title.trim().is_empty() {
+            project.name.clone()
+        } else {
+            draft.story_bible.title.trim().to_string()
+        },
+        characters: character_cards.clone(),
+        locations: materialize_locations(draft.story_bible.locations),
+        timeline: materialize_timeline(project, draft.story_bible.timeline),
+        world_rules: materialize_world_rules(&rules, draft.story_bible.world_rules),
+        relationships: draft.story_bible.relationships,
+        core_conflicts: materialize_core_conflicts(draft.story_bible.core_conflicts),
+    };
+
+    Ok(ExtractedWorldModel {
+        character_cards,
+        worldbook_entries,
+        rules,
+        story_bible,
+    })
+}
+
+fn materialize_character_cards(
+    cards: &[CharacterCardDraft],
+    fallback_cards: &[CharacterCardDraft],
+) -> AppResult<Vec<CharacterCard>> {
+    let source = if cards.is_empty() { fallback_cards } else { cards };
+    let mut materialized = Vec::new();
+
+    for (index, card) in source.iter().enumerate() {
+        let name = card.name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        materialized.push(CharacterCard {
+            id: if card.id.trim().is_empty() {
+                format!("character-{}", index + 1)
+            } else {
+                card.id.trim().to_string()
+            },
+            name: name.to_string(),
+            gender: fallback_string(&card.gender, "unknown"),
+            age: card.age,
+            identity: card.identity.trim().to_string(),
+            faction: card.faction.trim().to_string(),
+            role: card.role.trim().to_string(),
+            summary: card.summary.trim().to_string(),
+            desire: card.desire.trim().to_string(),
+            secrets: trim_vec(&card.secrets),
+            traits: trim_vec(&card.traits),
+            abilities: trim_vec(&card.abilities),
+            mutable_state: card.mutable_state.clone(),
+        });
+    }
+
+    Ok(materialized)
+}
+
+fn materialize_worldbook_entries(entries: Vec<WorldBookEntryDraft>) -> AppResult<Vec<WorldBookEntry>> {
+    Ok(entries
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, entry)| {
+            let title = entry.title.trim().to_string();
+            if title.is_empty() {
+                return None;
+            }
+            Some(WorldBookEntry {
+                id: if entry.id.trim().is_empty() {
+                    format!("worldbook-{}", index + 1)
+                } else {
+                    entry.id.trim().to_string()
+                },
+                title,
+                category: entry.category,
+                content: entry.content.trim().to_string(),
+                enabled: entry.enabled.unwrap_or(true),
+                keys: trim_vec(&entry.keys),
+                secondary_keys: trim_vec(&entry.secondary_keys),
+                selective_logic: entry.selective_logic,
+                constant: entry.constant.unwrap_or(false),
+                recursive: entry.recursive.unwrap_or(false),
+                exclude_recursion: entry.exclude_recursion.unwrap_or(false),
+                prevent_recursion: entry.prevent_recursion.unwrap_or(false),
+                delay_until_recursion: entry.delay_until_recursion,
+                scan_depth: entry.scan_depth.or(Some(4)),
+                case_sensitive: Some(entry.case_sensitive.unwrap_or(false)),
+                match_whole_words: Some(entry.match_whole_words.unwrap_or(false)),
+                sticky: entry.sticky,
+                cooldown: entry.cooldown,
+                delay: entry.delay,
+                triggers: trim_vec(&entry.triggers),
+                ignore_budget: entry.ignore_budget.unwrap_or(false),
+                order: entry.order.unwrap_or(index as i32),
+                insertion_mode: entry.insertion_mode,
+                source: fallback_string(&entry.source, "llm"),
+                rule_binding: entry.rule_binding.map(|value| value.trim().to_string()),
+            })
+        })
+        .collect())
+}
+
+fn materialize_rules(entries: Vec<RuleDefinitionDraft>) -> AppResult<Vec<RuleDefinition>> {
+    Ok(entries
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, rule)| {
+            let name = rule.name.trim().to_string();
+            if name.is_empty() {
+                return None;
+            }
+            Some(RuleDefinition {
+                id: if rule.id.trim().is_empty() {
+                    format!("rule-{}", index + 1)
+                } else {
+                    rule.id.trim().to_string()
+                },
+                name,
+                category: fallback_string(&rule.category, "miscellaneous"),
+                priority: rule.priority,
+                enabled: rule.enabled.unwrap_or(true),
+                conditions: rule.conditions,
+                blockers: rule.blockers,
+                effects: rule.effects,
+                explanation: fallback_string(&rule.explanation, "外部模型生成的规则"),
+            })
+        })
+        .collect())
+}
+
+fn materialize_locations(locations: Vec<LocationCard>) -> Vec<LocationCard> {
+    locations
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, mut location)| {
+            if location.name.trim().is_empty() {
+                return None;
+            }
+            if location.id.trim().is_empty() {
+                location.id = format!("location-{}", index + 1);
+            }
+            location.name = location.name.trim().to_string();
+            location.summary = location.summary.trim().to_string();
+            Some(location)
+        })
+        .collect()
+}
+
+fn materialize_timeline(project: &NovelProject, timeline: Vec<TimelineEntry>) -> Vec<TimelineEntry> {
+    if !timeline.is_empty() {
+        return timeline
+            .into_iter()
+            .enumerate()
+            .map(|(index, mut entry)| {
+                if entry.id.trim().is_empty() {
+                    entry.id = format!("timeline-{}", index + 1);
+                }
+                if entry.order == 0 {
+                    entry.order = index + 1;
+                }
+                entry.label = entry.label.trim().to_string();
+                entry.summary = entry.summary.trim().to_string();
+                entry
+            })
+            .collect();
+    }
+
+    project
+        .chapters
+        .iter()
+        .enumerate()
+        .map(|(index, chapter)| TimelineEntry {
+            id: format!("timeline-{}", index + 1),
+            label: chapter.title.clone(),
+            order: index + 1,
+            summary: chapter.excerpt.clone(),
+        })
+        .collect()
+}
+
+fn materialize_world_rules(rules: &[RuleDefinition], world_rules: Vec<WorldRule>) -> Vec<WorldRule> {
+    if !world_rules.is_empty() {
+        return world_rules
+            .into_iter()
+            .enumerate()
+            .map(|(index, mut item)| {
+                if item.id.trim().is_empty() {
+                    item.id = format!("world-rule-{}", index + 1);
+                }
+                item.description = item.description.trim().to_string();
+                item
+            })
+            .collect();
+    }
+
+    rules
+        .iter()
+        .enumerate()
+        .map(|(index, rule)| WorldRule {
+            id: format!("world-rule-{}", index + 1),
+            description: rule.explanation.clone(),
+        })
+        .collect()
+}
+
+fn materialize_core_conflicts(conflicts: Vec<CoreConflict>) -> Vec<CoreConflict> {
+    if conflicts.is_empty() {
+        return vec![CoreConflict {
+            id: "conflict-1".into(),
+            title: "秩序与真相".into(),
+            summary: "角色必须在守住规则与推进真相之间做出选择。".into(),
+        }];
+    }
+
+    conflicts
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, mut conflict)| {
+            if conflict.title.trim().is_empty() {
+                return None;
+            }
+            if conflict.id.trim().is_empty() {
+                conflict.id = format!("conflict-{}", index + 1);
+            }
+            conflict.title = conflict.title.trim().to_string();
+            conflict.summary = conflict.summary.trim().to_string();
+            Some(conflict)
+        })
+        .collect()
+}
+
+fn fallback_string(value: &str, default: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        default.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn trim_vec(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect()
 }
 
 #[derive(Default)]

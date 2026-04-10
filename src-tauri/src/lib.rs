@@ -17,7 +17,10 @@ use tauri::{Manager, State};
 
 use crate::{
     error::AppResult,
-    models::{BuildStatus, EndingReport, NovelProject, ScenePayload, SessionState, StoryCodex, StoryPackage},
+    models::{
+        AiProviderKind, AppAiSettingsSnapshot, BuildStatus, EndingReport, NovelProject,
+        SaveAiSettingsInput, ScenePayload, SessionState, StoryCodex, StoryPackage,
+    },
     rules::RuleDefinition,
     store::ProjectStore,
     worldbook::WorldBookEntry,
@@ -42,6 +45,24 @@ fn import_novel_text(
 #[tauri::command]
 fn build_story_package(state: State<'_, StoreState>, project_id: String) -> Result<BuildStatus, String> {
     with_store(state, move |store| store.build_story_package(&project_id))
+}
+
+#[tauri::command]
+fn get_ai_settings(state: State<'_, StoreState>) -> Result<AppAiSettingsSnapshot, String> {
+    with_store(state, move |store| store.get_ai_settings())
+}
+
+#[tauri::command]
+fn save_ai_settings(state: State<'_, StoreState>, input: SaveAiSettingsInput) -> Result<AppAiSettingsSnapshot, String> {
+    with_store(state, move |store| store.save_ai_settings(input))
+}
+
+#[tauri::command]
+fn clear_provider_api_key(
+    state: State<'_, StoreState>,
+    provider_kind: AiProviderKind,
+) -> Result<AppAiSettingsSnapshot, String> {
+    with_store(state, move |store| store.clear_provider_api_key(provider_kind))
 }
 
 #[tauri::command]
@@ -209,6 +230,9 @@ pub fn run() {
             create_project,
             import_novel_text,
             build_story_package,
+            get_ai_settings,
+            save_ai_settings,
+            clear_provider_api_key,
             get_build_status,
             load_story_package,
             get_project,
