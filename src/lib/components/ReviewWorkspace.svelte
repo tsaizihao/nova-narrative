@@ -36,15 +36,19 @@
       : activeSection === 'worldbook'
         ? project.worldbook_entries.length
         : project.rules.length;
+
+  $: sectionTitle =
+    activeSection === 'characters'
+      ? '角色编辑'
+      : activeSection === 'worldbook'
+        ? '世界书编辑'
+        : '规则编辑';
 </script>
 
 <section class="workspace-shell">
-  <div class="workspace-main">
+  <div class="workspace-main" data-testid="review-editor-column">
     <div class="workspace-header">
-      <div>
-        <p class="eyebrow">Review Workspace</p>
-        <h3>一次只专注一类结构化实体</h3>
-      </div>
+      <h3>{sectionTitle}</h3>
       <span>{activeCount} 个条目</span>
     </div>
 
@@ -86,31 +90,23 @@
 <style>
   .workspace-shell {
     display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.8fr);
-    gap: 18px;
+    grid-template-columns: minmax(0, 1.75fr) minmax(260px, 0.72fr);
+    gap: 16px;
     align-items: start;
   }
 
   .workspace-main {
     display: grid;
-    gap: 16px;
+    gap: 14px;
     align-content: start;
   }
 
   .workspace-header {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
-    align-items: flex-end;
-    padding: 22px 24px 0;
-  }
-
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #91765d;
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-    font-size: 0.68rem;
+    gap: 12px;
+    align-items: baseline;
+    padding: 10px 24px 0;
   }
 
   h3,
@@ -121,12 +117,12 @@
   h3 {
     color: #2f261d;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    font-size: clamp(1.2rem, 2.1vw, 1.6rem);
   }
 
   .workspace-header span {
     color: rgba(63, 47, 35, 0.62);
-    font-size: 0.86rem;
+    font-size: 0.8rem;
   }
 
   .section-tabs {

@@ -95,6 +95,38 @@ const rulePreview: RuleEvaluationResult = {
 };
 
 describe('ReviewWorkspace', () => {
+  it('keeps a left-first editor column and a secondary preview rail', async () => {
+    render(ReviewWorkspace, {
+      props: {
+        project,
+        lorePreview: [
+          {
+            entry_id: 'w1',
+            title: '北门禁令',
+            slot: 'rules_guard',
+            matched_keys: ['北门'],
+            reason: '命中北门',
+            lifecycle_state: 'ready',
+            content: '午夜不可开门',
+            source: 'extractor',
+            rule_binding: null
+          }
+        ],
+        rulePreview
+      }
+    });
+
+    expect(screen.getByRole('heading', { name: '角色编辑' })).toBeInTheDocument();
+    expect(screen.getByTestId('review-editor-column')).toBeInTheDocument();
+    expect(screen.getByTestId('review-preview-rail')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '世界书' })).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: '世界书' }));
+
+    expect(screen.getByRole('heading', { name: '世界书编辑' })).toBeInTheDocument();
+    expect(screen.getByTestId('review-preview-rail')).toBeInTheDocument();
+  });
+
   it('shows one section at a time and keeps the preview visible', async () => {
     render(ReviewWorkspace, {
       props: {

@@ -7,8 +7,8 @@
   export let error = '';
 </script>
 
-<aside class="preview-rail">
-  <section class="preview-section">
+<aside class="preview-rail" data-testid="review-preview-rail">
+  <section class="preview-section" data-testid="review-lore-preview">
     <div class="section-head">
       <strong>lore 预览</strong>
       <span>{lorePreview.length} 条</span>
@@ -30,7 +30,7 @@
     </div>
   </section>
 
-  <section class="preview-section">
+  <section class="preview-section" data-testid="review-rules-preview">
     <div class="section-head">
       <strong>规则预览</strong>
       <span>{rulePreview?.active_rules.length ?? 0} 条</span>
@@ -50,7 +50,7 @@
     </div>
 
     {#if rulePreview}
-      <div class="state-preview">
+      <div class="inline-state-summary">
         <strong>预测状态</strong>
         <p>
           {#if rulePreview.story_state.possibility_flags.length}
@@ -73,17 +73,16 @@
 <style>
   .preview-rail {
     display: grid;
-    gap: 16px;
+    gap: 12px;
     align-content: start;
   }
 
-  .preview-section,
-  .state-preview {
-    padding: 20px;
-    border-radius: 22px;
+  .preview-section {
+    padding: 14px;
+    border-radius: 16px;
     border: 1px solid rgba(121, 103, 81, 0.14);
-    background: rgba(248, 243, 234, 0.94);
-    box-shadow: 0 14px 28px rgba(65, 49, 35, 0.06);
+    background: rgba(248, 243, 234, 0.9);
+    box-shadow: 0 8px 18px rgba(65, 49, 35, 0.045);
   }
 
   .section-head {
@@ -94,31 +93,31 @@
   }
 
   .section-head strong,
-  .state-preview strong {
+  .inline-state-summary strong {
     color: #2f261d;
-    font-size: 1rem;
+    font-size: 0.92rem;
   }
 
   .section-head span {
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     color: rgba(63, 47, 35, 0.6);
   }
 
   .preview-list {
-    margin-top: 14px;
+    margin-top: 10px;
     display: grid;
-    gap: 10px;
+    gap: 8px;
   }
 
   article {
-    padding: 14px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.8);
+    padding: 10px 11px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.78);
     border: 1px solid rgba(121, 103, 81, 0.1);
   }
 
   article p,
-  .state-preview p,
+  .inline-state-summary p,
   .empty,
   .error {
     margin: 0;
@@ -131,20 +130,27 @@
 
   article span {
     display: block;
-    margin-top: 6px;
-    font-size: 0.82rem;
+    margin-top: 4px;
+    font-size: 0.78rem;
   }
 
-  .state-preview p,
-  .empty {
+  .inline-state-summary {
     margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(121, 103, 81, 0.24);
+  }
+
+  .inline-state-summary p,
+  .empty {
+    margin-top: 6px;
     color: rgba(63, 47, 35, 0.72);
-    line-height: 1.65;
+    line-height: 1.55;
+    font-size: 0.82rem;
   }
 
   .error {
     color: #b14d3b;
-    font-size: 0.88rem;
+    font-size: 0.82rem;
   }
 
   .tone-danger {
