@@ -69,7 +69,7 @@
 <style>
   .review-stage-shell {
     display: grid;
-    gap: 16px;
+    gap: 12px;
     width: min(1440px, 100%);
     margin: 0 auto;
   }
@@ -78,42 +78,42 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
-    border-radius: 24px;
-    border: 1px solid rgba(121, 103, 81, 0.14);
-    background: rgba(250, 246, 239, 0.86);
-    box-shadow: 0 16px 36px rgba(70, 54, 39, 0.08);
+    padding: 12px 18px;
+    border-radius: 22px;
+    border: 1px solid rgba(121, 103, 81, 0.12);
+    background: rgba(251, 247, 240, 0.8);
+    box-shadow: 0 10px 22px rgba(70, 54, 39, 0.05);
   }
 
   .topbar-copy strong {
     display: block;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: 1.35rem;
+    font-size: 1.26rem;
   }
 
   .review-stage-strip {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 20px;
-    padding: 24px;
-    border-radius: 24px;
-    border: 1px solid rgba(121, 103, 81, 0.14);
-    background: rgba(248, 243, 234, 0.94);
-    box-shadow: 0 14px 28px rgba(65, 49, 35, 0.06);
+    gap: 16px;
+    padding: 16px 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(121, 103, 81, 0.12);
+    background: rgba(252, 249, 242, 0.8);
+    box-shadow: 0 8px 18px rgba(65, 49, 35, 0.04);
   }
 
   .strip-copy h2 {
     margin: 0;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: clamp(2rem, 4vw, 3rem);
+    font-size: clamp(1.45rem, 2.4vw, 2.1rem);
     color: #2f261d;
   }
 
   .strip-copy p {
-    margin: 12px 0 0;
+    margin: 8px 0 0;
     max-width: 640px;
-    line-height: 1.7;
+    line-height: 1.62;
     color: rgba(63, 47, 35, 0.74);
   }
 

@@ -23,7 +23,9 @@ const rulePreview: RuleEvaluationResult = {
       rule_id: 'r1',
       name: '怀孕可能性',
       priority: 'consequence',
-      explanation: '写入 possibility.conception=true'
+      explanation: '写入 possibility.conception=true',
+      effects: [],
+      reason: '命中状态规则'
     }
   ],
   blocked: false
