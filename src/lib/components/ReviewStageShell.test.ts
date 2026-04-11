@@ -102,7 +102,8 @@ describe('ReviewStageShell', () => {
       }
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: '保存并刷新预览' }));
+    const editorColumn = screen.getByTestId('review-editor-column');
+    await fireEvent.click(within(editorColumn).getByRole('button', { name: '保存并刷新预览' }));
 
     expect(saveCharacter).toHaveBeenCalledTimes(1);
     expect(saveCharacter.mock.calls[0][0].detail).toMatchObject({

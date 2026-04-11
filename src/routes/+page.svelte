@@ -497,6 +497,7 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
   :global(body) {
     margin: 0;
     min-height: 100vh;
+    overflow-x: hidden;
     background:
       radial-gradient(circle at top, rgba(215, 194, 166, 0.4), transparent 30%),
       linear-gradient(180deg, #f6f1e8 0%, #efe7da 100%);
@@ -515,7 +516,6 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
     position: relative;
     min-height: 100vh;
     padding: 28px;
-    overflow: hidden;
   }
 
   .page-glow {
