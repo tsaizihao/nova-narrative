@@ -586,70 +586,6 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
     font-size: 0.9rem;
   }
 
-  .eyebrow {
-    margin: 0 0 8px;
-    color: #d3b37b;
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    font-size: 0.68rem;
-  }
-
-  .review-shell {
-    position: relative;
-    z-index: 1;
-    width: min(1440px, 100%);
-    margin: 0 auto;
-  }
-
-  .review-shell {
-    display: grid;
-    gap: 18px;
-  }
-
-  .review-hero {
-    padding: 24px;
-    border-radius: 24px;
-    border: 1px solid rgba(121, 103, 81, 0.14);
-    background: rgba(248, 243, 234, 0.94);
-    box-shadow: 0 14px 28px rgba(65, 49, 35, 0.06);
-  }
-
-  .review-hero {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    align-items: flex-start;
-  }
-
-  .review-hero h2,
-  .review-hero p {
-    margin: 0;
-  }
-
-  .review-hero h2 {
-    color: #2f261d;
-    font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: clamp(2rem, 4vw, 3rem);
-  }
-
-  .review-hero p:last-child {
-    margin-top: 12px;
-    max-width: 760px;
-    line-height: 1.7;
-    color: rgba(63, 47, 35, 0.74);
-  }
-
-  .review-hero button {
-    min-width: 180px;
-    min-height: 48px;
-    padding: 0 18px;
-    border-radius: 999px;
-    border: none;
-    background: #1f6a57;
-    color: #f6f3eb;
-    cursor: pointer;
-  }
-
   @media (max-width: 1200px) {
     .topbar {
       display: grid;
@@ -665,11 +601,6 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
   @media (max-width: 900px) {
     .page-shell {
       padding: 18px;
-    }
-
-    .review-hero {
-      grid-template-columns: 1fr;
-      display: grid;
     }
   }
 </style>
