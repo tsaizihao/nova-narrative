@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
 import ReviewStageShell from './ReviewStageShell.svelte';
@@ -36,26 +36,31 @@ const rulePreview: RuleEvaluationResult = {
 
 describe('ReviewStageShell', () => {
   it('renders a compact review strip and dispatches the reader CTA', async () => {
-    const { component } = render(ReviewStageShell, {
+    const enterStory = vi.fn();
+    render(ReviewStageShell, {
       props: {
         project,
         lorePreview: [],
         rulePreview,
         error: '',
         busy: false
+      },
+      events: {
+        enterStory
       }
     });
 
-    const stageShell = screen.getByTestId('review-stage-shell');
-    const enterStory = vi.fn();
-    stageShell.addEventListener('enterStory', enterStory);
-
     expect(screen.getByText('临川夜话')).toBeInTheDocument();
-    expect(screen.getAllByText('审阅')[0]).toBeInTheDocument();
     expect(screen.getAllByText('Review')[0]).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '先校正世界模型，再进入故事' })).toBeInTheDocument();
     expect(screen.getByTestId('review-stage-strip')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '进入互动故事' })).toBeInTheDocument();
+
+    const stepper = screen.getByRole('list');
+    const stepItems = within(stepper).getAllByRole('listitem');
+    const currentSteps = stepItems.filter((item) => item.dataset.state === 'current');
+    expect(currentSteps).toHaveLength(1);
+    expect(currentSteps[0]).toHaveTextContent('审阅');
 
     await fireEvent.click(screen.getByRole('button', { name: '进入互动故事' }));
 

@@ -28,15 +28,9 @@
   }>();
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
-  let stageShellElement: HTMLDivElement | null = null;
-
-  function handleEnterStoryClick() {
-    dispatch('enterStory');
-    stageShellElement?.dispatchEvent(new CustomEvent('enterStory', { bubbles: true }));
-  }
 </script>
 
-<div class="review-stage-shell" bind:this={stageShellElement} data-testid="review-stage-shell">
+<div class="review-stage-shell" data-testid="review-stage-shell">
   <header class="review-stage-topbar">
     <div class="topbar-copy">
       <p class="eyebrow">审阅</p>
@@ -54,7 +48,7 @@
         lore 激活和规则判断。
       </p>
     </div>
-    <button type="button" on:click={handleEnterStoryClick} disabled={busy}>
+    <button type="button" on:click={() => dispatch('enterStory')} disabled={busy}>
       进入互动故事
     </button>
   </section>
