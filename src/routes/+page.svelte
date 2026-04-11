@@ -5,9 +5,9 @@
   import EndingScreen from '$lib/components/EndingScreen.svelte';
   import ImportScreen from '$lib/components/ImportScreen.svelte';
   import PhaseStepper from '$lib/components/PhaseStepper.svelte';
-  import ReaderDesktopShell from '$lib/components/ReaderDesktopShell.svelte';
-  import ReaderMobileShell from '$lib/components/ReaderMobileShell.svelte';
-  import ReviewWorkspace from '$lib/components/ReviewWorkspace.svelte';
+import ReaderDesktopShell from '$lib/components/ReaderDesktopShell.svelte';
+import ReaderMobileShell from '$lib/components/ReaderMobileShell.svelte';
+import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
   import { api } from '$lib/api/client';
   import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
@@ -445,31 +445,20 @@
     />
   {:else if phase === 'building'}
     <BuildProgressScreen projectName={project?.name ?? projectName} {buildStatus} />
-  {:else if phase === 'review' && project}
-    <div class="review-shell">
-      <section class="review-hero">
-        <div>
-          <p class="eyebrow">Review Stage</p>
-          <h2>先校正世界模型，再进入故事</h2>
-          <p>
-            这一轮可以轻量修改角色卡、世界书和规则。右侧预览会直接反映这些结构化结果如何影响
-            lore 激活和规则判断。
-          </p>
-        </div>
-        <button type="button" on:click={enterStory} disabled={busy}>进入互动故事</button>
-      </section>
-      <ReviewWorkspace
-        {project}
-        {lorePreview}
-        {rulePreview}
-        {error}
-        on:saveCharacter={saveCharacter}
-        on:saveWorldBook={saveWorldBook}
-        on:deleteWorldBook={deleteWorldBook}
-        on:saveRule={saveRule}
-        on:deleteRule={deleteRule}
-      />
-    </div>
+{:else if phase === 'review' && project}
+    <ReviewStageShell
+      {project}
+      {lorePreview}
+      {rulePreview}
+      {error}
+      {busy}
+      on:enterStory={enterStory}
+      on:saveCharacter={saveCharacter}
+      on:saveWorldBook={saveWorldBook}
+      on:deleteWorldBook={deleteWorldBook}
+      on:saveRule={saveRule}
+      on:deleteRule={deleteRule}
+    />
   {:else if phase === 'reader' && payload && activeSession}
     {#if readerLayoutMode === 'desktop'}
       <ReaderDesktopShell
