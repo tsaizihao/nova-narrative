@@ -125,6 +125,13 @@ describe('ReviewWorkspace', () => {
 
     expect(screen.getByRole('heading', { name: '世界书编辑' })).toBeInTheDocument();
     expect(screen.getByTestId('review-preview-rail')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: '规则' }));
+
+    expect(screen.getByRole('heading', { name: '规则编辑' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存并刷新预览' })).toBeInTheDocument();
+    expect(screen.getByText('午夜禁令')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '规则' })).toBeInTheDocument();
   });
 
   it('shows one section at a time and keeps the preview visible', async () => {

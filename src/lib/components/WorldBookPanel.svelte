@@ -26,10 +26,10 @@
 <section class="panel">
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Review</p>
+      <p class="eyebrow">Editor</p>
       <h3>世界书</h3>
     </div>
-    <p>{entries.length} 条 lore</p>
+    <p class="count">{entries.length} 条 lore</p>
   </div>
 
   {#if drafts.length}
@@ -91,31 +91,31 @@
 <style>
   .panel {
     display: grid;
-    gap: 16px;
-    padding: 24px;
-    border-radius: 24px;
-    border: 1px solid rgba(121, 103, 81, 0.14);
-    background: rgba(248, 243, 234, 0.94);
-    box-shadow: 0 14px 28px rgba(65, 49, 35, 0.06);
+    gap: 14px;
+    padding: 20px;
+    border-radius: 20px;
+    border: 1px solid rgba(121, 103, 81, 0.12);
+    background: rgba(248, 243, 234, 0.9);
+    box-shadow: 0 10px 22px rgba(65, 49, 35, 0.05);
   }
 
   .panel-head {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
-    align-items: flex-end;
+    gap: 12px;
+    align-items: flex-start;
   }
 
   .eyebrow {
-    margin: 0 0 8px;
-    color: #91765d;
+    margin: 0 0 6px;
+    color: rgba(63, 47, 35, 0.52);
     text-transform: uppercase;
-    letter-spacing: 0.18em;
-    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    font-size: 0.64rem;
   }
 
   h3,
-  .panel-head p,
+  .count,
   .empty {
     margin: 0;
   }
@@ -123,34 +123,39 @@
   h3 {
     color: #2f261d;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: 1.5rem;
+    font-size: 1.32rem;
   }
 
-  .panel-head p,
+  .count,
   .empty {
-    color: rgba(63, 47, 35, 0.66);
+    color: rgba(63, 47, 35, 0.58);
+  }
+
+  .count {
+    padding-top: 4px;
+    font-size: 0.8rem;
   }
 
   .workspace {
     display: grid;
-    grid-template-columns: minmax(200px, 0.42fr) minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: minmax(210px, 0.4fr) minmax(0, 0.6fr);
+    gap: 14px;
   }
 
   .entity-list {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     align-content: start;
   }
 
   .entity-list button {
     display: grid;
     gap: 4px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     text-align: left;
-    border-radius: 18px;
+    border-radius: 14px;
     border: 1px solid rgba(121, 103, 81, 0.12);
-    background: rgba(255, 255, 255, 0.78);
+    background: rgba(255, 255, 255, 0.74);
     font: inherit;
     cursor: pointer;
   }
@@ -173,9 +178,9 @@
   .editor {
     display: grid;
     gap: 12px;
-    padding: 18px;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.82);
+    padding: 16px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(121, 103, 81, 0.12);
   }
 
@@ -242,7 +247,7 @@
     color: #5f4f3e;
   }
 
-  @media (max-width: 920px) {
+  @media (max-width: 960px) {
     .workspace,
     .row {
       grid-template-columns: 1fr;
