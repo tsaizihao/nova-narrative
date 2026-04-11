@@ -51,7 +51,8 @@ describe('ReviewStageShell', () => {
     });
 
     expect(screen.getByText('临川夜话')).toBeInTheDocument();
-    expect(screen.getAllByText('Review')[0]).toBeInTheDocument();
+    const strip = screen.getByTestId('review-stage-strip');
+    expect(within(strip).getByText('Review')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '先校正世界模型，再进入故事' })).toBeInTheDocument();
     expect(screen.getByTestId('review-stage-strip')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '进入互动故事' })).toBeInTheDocument();

@@ -445,7 +445,7 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
     />
   {:else if phase === 'building'}
     <BuildProgressScreen projectName={project?.name ?? projectName} {buildStatus} />
-{:else if phase === 'review' && project}
+  {:else if phase === 'review' && project}
     <ReviewStageShell
       {project}
       {lorePreview}
