@@ -75,6 +75,8 @@
     display: grid;
     gap: 12px;
     align-content: start;
+    position: sticky;
+    top: 12px;
   }
 
   .preview-section {
@@ -168,5 +170,12 @@
 
   .tone-muted {
     color: rgba(63, 47, 35, 0.58);
+  }
+
+  @media (max-width: 1120px) {
+    .preview-rail {
+      position: static;
+      top: auto;
+    }
   }
 </style>

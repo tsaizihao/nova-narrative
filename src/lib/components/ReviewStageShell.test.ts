@@ -67,4 +67,47 @@ describe('ReviewStageShell', () => {
 
     expect(enterStory).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards saveCharacter from the mounted workspace', async () => {
+    const saveCharacter = vi.fn();
+    render(ReviewStageShell, {
+      props: {
+        project: {
+          ...project,
+          character_cards: [
+            {
+              id: 'char-1',
+              name: '沈砚',
+              gender: '男',
+              age: 27,
+              identity: '巡夜人',
+              faction: '巡城司',
+              role: '主角',
+              summary: '在雨夜追查失踪案。',
+              desire: '找回妹妹',
+              secrets: ['曾与嫌疑人合作'],
+              traits: ['冷静'],
+              abilities: ['追踪'],
+              mutable_state: {}
+            }
+          ]
+        },
+        lorePreview: [],
+        rulePreview,
+        error: '',
+        busy: false
+      },
+      events: {
+        saveCharacter
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '保存并刷新预览' }));
+
+    expect(saveCharacter).toHaveBeenCalledTimes(1);
+    expect(saveCharacter.mock.calls[0][0].detail).toMatchObject({
+      id: 'char-1',
+      name: '沈砚'
+    });
+  });
 });

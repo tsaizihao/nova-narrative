@@ -412,16 +412,18 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
   <div class="page-glow page-glow-left"></div>
   <div class="page-glow page-glow-right"></div>
 
-  <header class="topbar">
-    <div>
-      <p>Nova Narrative</p>
-      <strong>小说改编工作台</strong>
-    </div>
-    <div class="topbar-meta">
-      <span>{project?.name ?? '单本项目制'}</span>
-      <PhaseStepper phase={stepperPhase} labels={phaseLabels} />
-    </div>
-  </header>
+  {#if phase !== 'review'}
+    <header class="topbar">
+      <div>
+        <p>Nova Narrative</p>
+        <strong>小说改编工作台</strong>
+      </div>
+      <div class="topbar-meta">
+        <span>{project?.name ?? '单本项目制'}</span>
+        <PhaseStepper phase={stepperPhase} labels={phaseLabels} />
+      </div>
+    </header>
+  {/if}
 
   {#if phase === 'import'}
     <ImportScreen
