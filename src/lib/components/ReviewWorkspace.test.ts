@@ -130,7 +130,7 @@ describe('ReviewWorkspace', () => {
 
     expect(screen.getByRole('heading', { name: '规则编辑' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存并刷新预览' })).toBeInTheDocument();
-    expect(screen.getByText('午夜禁令')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /午夜禁令/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '规则' })).toBeInTheDocument();
   });
 
