@@ -19,6 +19,7 @@
         "title": "Nova Narrative",
         "width": 1440,
         "height": 920,
+        "maximized": true,
         "minWidth": 1080,
         "minHeight": 720,
         "resizable": true
