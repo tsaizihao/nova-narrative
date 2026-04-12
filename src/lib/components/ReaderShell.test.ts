@@ -86,7 +86,7 @@ const payload: ScenePayload = {
 
 describe('ReaderDesktopShell', () => {
   it('renders the main stage before the world and state rails', () => {
-    render(ReaderDesktopShell, {
+    const { container } = render(ReaderDesktopShell, {
       props: {
         payload,
         codex: null,
@@ -100,12 +100,13 @@ describe('ReaderDesktopShell', () => {
     expect(screen.getByRole('heading', { name: '北门之夜' })).toBeInTheDocument();
     expect(screen.getByText('世界侧栏')).toBeInTheDocument();
     expect(screen.getByText('世界状态')).toBeInTheDocument();
+    expect(container.querySelector('.reader-desktop')).toHaveAttribute('data-tone', 'paper');
   });
 });
 
 describe('ReaderMobileShell', () => {
   it('keeps lore and state hidden until their drawers are opened', async () => {
-    render(ReaderMobileShell, {
+    const { container } = render(ReaderMobileShell, {
       props: {
         payload,
         codex: null,
@@ -115,18 +116,21 @@ describe('ReaderMobileShell', () => {
       }
     });
 
+    expect(container.querySelector('.reader-mobile')).toHaveAttribute('data-tone', 'paper');
     expect(screen.queryByRole('dialog', { name: '世界侧栏' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '世界状态' })).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: '打开世界信息' }));
     const worldDialog = screen.getByRole('dialog', { name: '世界侧栏' });
     expect(worldDialog).toHaveAttribute('aria-modal', 'true');
+    expect(worldDialog).toHaveAttribute('data-tone', 'paper');
 
     await fireEvent.click(screen.getByRole('button', { name: '打开状态信息' }));
     expect(screen.queryByRole('dialog', { name: '世界侧栏' })).not.toBeInTheDocument();
 
     const stateDialog = screen.getByRole('dialog', { name: '世界状态' });
     expect(stateDialog).toHaveAttribute('aria-modal', 'true');
+    expect(stateDialog).toHaveAttribute('data-tone', 'paper');
 
     await fireEvent.keyDown(stateDialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '世界状态' })).not.toBeInTheDocument();

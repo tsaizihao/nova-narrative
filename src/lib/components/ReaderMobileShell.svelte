@@ -25,7 +25,7 @@
   }
 </script>
 
-<section class="reader-mobile">
+<section class="reader-mobile" data-tone="paper">
   <div class="mobile-tools">
     <button type="button" aria-label="打开世界信息" on:click={openWorld}>世界</button>
     <button type="button" aria-label="打开状态信息" on:click={openState}>状态</button>
@@ -50,10 +50,21 @@
 
 <style>
   .reader-mobile {
-    --reader-shell-surface: rgba(15, 13, 16, 0.92);
-    --reader-panel-surface: rgba(28, 24, 25, 0.88);
-    --reader-card-surface: rgba(255, 248, 230, 0.05);
-    --reader-border: rgba(255, 243, 214, 0.08);
+    --reader-shell-surface: rgba(248, 243, 234, 0.98);
+    --reader-panel-surface: rgba(253, 250, 245, 0.98);
+    --reader-card-surface: rgba(244, 236, 225, 0.86);
+    --reader-chip-surface: rgba(121, 103, 81, 0.08);
+    --reader-border: rgba(121, 103, 81, 0.14);
+    --reader-shadow: 0 18px 36px rgba(70, 54, 39, 0.08);
+    --reader-stage-shadow: 0 22px 44px rgba(89, 68, 48, 0.12);
+    --reader-title: #2f261d;
+    --reader-body: rgba(47, 38, 29, 0.9);
+    --reader-muted: rgba(63, 47, 35, 0.64);
+    --reader-eyebrow: #91765d;
+    --reader-accent: #1f6a57;
+    --reader-accent-soft: rgba(31, 106, 87, 0.14);
+    --reader-warm-accent: #9b6d39;
+    --reader-danger: #b14d3b;
     display: grid;
     gap: 12px;
   }
@@ -66,10 +77,10 @@
   .mobile-tools button {
     min-height: 40px;
     padding: 0 14px;
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    border: 1px solid var(--reader-border, rgba(121, 103, 81, 0.14));
     border-radius: 999px;
-    background: rgba(23, 20, 21, 0.92);
-    color: #f7e5bf;
+    background: var(--reader-card-surface, rgba(244, 236, 225, 0.86));
+    color: var(--reader-title, #2f261d);
     font: inherit;
     cursor: pointer;
   }

@@ -103,7 +103,7 @@
     border-radius: 24px;
     border: 1px solid var(--reader-border, rgba(255, 243, 214, 0.08));
     background: var(--reader-shell-surface, rgba(12, 11, 15, 0.88));
-    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
+    box-shadow: var(--reader-shadow, 0 18px 36px rgba(70, 54, 39, 0.08));
   }
 
   .rail-head {
@@ -115,7 +115,7 @@
 
   .eyebrow {
     margin: 0 0 8px;
-    color: #d3b37b;
+    color: var(--reader-eyebrow, #91765d);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     font-size: 0.68rem;
@@ -128,14 +128,14 @@
   }
 
   h3 {
-    color: #fff4dd;
+    color: var(--reader-title, #2f261d);
     font-family: 'Iowan Old Style', 'Songti SC', serif;
     font-size: 1.35rem;
   }
 
   .rail-head p,
   .empty {
-    color: rgba(255, 243, 214, 0.6);
+    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
     font-size: 0.8rem;
   }
 
@@ -147,10 +147,10 @@
 
   .tabs button,
   .checkpoint-list button {
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    border: 1px solid var(--reader-border, rgba(121, 103, 81, 0.14));
     border-radius: 999px;
-    background: rgba(255, 248, 230, 0.04);
-    color: #f7e5bf;
+    background: var(--reader-card-surface, rgba(244, 236, 225, 0.82));
+    color: var(--reader-title, #2f261d);
     cursor: pointer;
     font: inherit;
   }
@@ -161,8 +161,9 @@
   }
 
   .tabs button.active {
-    background: rgba(31, 106, 87, 0.22);
+    background: var(--reader-accent-soft, rgba(31, 106, 87, 0.14));
     border-color: rgba(31, 106, 87, 0.24);
+    color: var(--reader-accent, #1f6a57);
   }
 
   .rail-stack {
@@ -174,7 +175,7 @@
     padding: 14px;
     border-radius: 16px;
     background: var(--reader-card-surface, rgba(255, 248, 230, 0.05));
-    border: 1px solid rgba(255, 238, 207, 0.06);
+    border: 1px solid var(--reader-border, rgba(121, 103, 81, 0.14));
   }
 
   article strong,
@@ -184,7 +185,7 @@
   }
 
   article strong {
-    color: #fff4dd;
+    color: var(--reader-title, #2f261d);
   }
 
   article span {
@@ -194,26 +195,26 @@
 
   article p {
     margin: 8px 0 0;
-    color: rgba(255, 243, 214, 0.7);
+    color: var(--reader-body, rgba(47, 38, 29, 0.9));
     line-height: 1.6;
     font-size: 0.86rem;
   }
 
   .tone-danger {
-    color: #ffb7a5;
+    color: var(--reader-danger, #b14d3b);
   }
 
   .tone-warning {
-    color: #f4cf90;
+    color: var(--reader-warm-accent, #9b6d39);
   }
 
   .tone-accent,
   .tone-success {
-    color: #bfe5db;
+    color: var(--reader-accent, #1f6a57);
   }
 
   .tone-muted {
-    color: rgba(255, 243, 214, 0.6);
+    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
   }
 
   .checkpoint-list {

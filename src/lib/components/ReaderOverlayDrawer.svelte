@@ -28,6 +28,7 @@
     <div
       bind:this={drawerElement}
       class="drawer"
+      data-tone="paper"
       role="dialog"
       aria-label={title}
       aria-modal="true"
@@ -73,8 +74,9 @@
     display: grid;
     grid-template-rows: auto 1fr;
     border-radius: 24px;
-    border: 1px solid rgba(255, 243, 214, 0.08);
-    background: rgba(10, 10, 14, 0.96);
+    border: 1px solid rgba(121, 103, 81, 0.14);
+    background: rgba(248, 243, 234, 0.98);
+    box-shadow: 0 18px 42px rgba(70, 54, 39, 0.16);
     overflow: hidden;
     outline: none;
   }
@@ -85,21 +87,21 @@
     gap: 12px;
     align-items: center;
     padding: 16px 18px;
-    border-bottom: 1px solid rgba(255, 243, 214, 0.08);
+    border-bottom: 1px solid rgba(121, 103, 81, 0.14);
   }
 
   strong {
-    color: #fff4dd;
+    color: #2f261d;
     font-size: 1rem;
   }
 
   button {
     min-height: 34px;
     padding: 0 12px;
-    border: none;
+    border: 1px solid rgba(121, 103, 81, 0.12);
     border-radius: 999px;
-    background: rgba(255, 248, 230, 0.08);
-    color: #f7e5bf;
+    background: rgba(244, 236, 225, 0.86);
+    color: #2f261d;
     font: inherit;
     cursor: pointer;
   }

@@ -116,24 +116,24 @@
     border-radius: 30px;
     border: 1px solid var(--reader-border, rgba(255, 243, 214, 0.08));
     background:
-      linear-gradient(180deg, rgba(10, 10, 14, 0.42), rgba(10, 10, 14, 0.82)),
-      radial-gradient(circle at top, rgba(227, 196, 129, 0.14), transparent 35%),
-      var(--reader-shell-surface, rgba(10, 10, 14, 0.92));
-    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.26);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(244, 236, 225, 0.72)),
+      radial-gradient(circle at top, rgba(215, 194, 166, 0.35), transparent 52%),
+      var(--reader-shell-surface, rgba(248, 243, 234, 0.96));
+    box-shadow: var(--reader-stage-shadow, 0 22px 44px rgba(89, 68, 48, 0.12));
   }
 
   .stage.warning {
     background:
-      linear-gradient(180deg, rgba(10, 10, 14, 0.46), rgba(10, 10, 14, 0.86)),
-      radial-gradient(circle at top, rgba(213, 140, 52, 0.18), transparent 35%),
-      rgba(10, 10, 14, 0.92);
+      linear-gradient(180deg, rgba(255, 251, 244, 0.72), rgba(243, 231, 211, 0.86)),
+      radial-gradient(circle at top, rgba(213, 140, 52, 0.16), transparent 44%),
+      var(--reader-shell-surface, rgba(248, 243, 234, 0.96));
   }
 
   .stage.reveal {
     background:
-      linear-gradient(180deg, rgba(10, 10, 14, 0.4), rgba(10, 10, 14, 0.84)),
-      radial-gradient(circle at top, rgba(210, 184, 132, 0.2), transparent 38%),
-      rgba(10, 10, 14, 0.92);
+      linear-gradient(180deg, rgba(255, 252, 247, 0.74), rgba(240, 233, 221, 0.88)),
+      radial-gradient(circle at top, rgba(183, 165, 128, 0.18), transparent 46%),
+      var(--reader-shell-surface, rgba(248, 243, 234, 0.96));
   }
 
   .stage-header {
@@ -145,7 +145,7 @@
 
   .eyebrow {
     margin: 0 0 8px;
-    color: #d3b37b;
+    color: var(--reader-eyebrow, #91765d);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     font-size: 0.68rem;
@@ -156,7 +156,7 @@
     max-width: 12ch;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
     font-size: clamp(2.2rem, 4vw, 3.4rem);
-    color: #fff4dd;
+    color: var(--reader-title, #2f261d);
   }
 
   .tool-pills {
@@ -169,8 +169,8 @@
   .tool-pills span {
     padding: 10px 14px;
     border-radius: 999px;
-    background: rgba(255, 248, 230, 0.06);
-    color: rgba(255, 243, 214, 0.74);
+    background: var(--reader-chip-surface, rgba(121, 103, 81, 0.08));
+    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
     font-size: 0.8rem;
   }
 
@@ -180,8 +180,8 @@
     padding: 24px;
     border-radius: 26px;
     background:
-      linear-gradient(180deg, rgba(19, 18, 21, 0.7), rgba(19, 18, 21, 0.88)),
-      var(--reader-panel-surface, rgba(14, 11, 9, 0.74));
+      linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(250, 244, 236, 0.86)),
+      var(--reader-panel-surface, rgba(253, 250, 245, 0.96));
     min-height: 420px;
   }
 
@@ -194,7 +194,7 @@
     margin: 0;
     line-height: 1.92;
     font-size: 1.04rem;
-    color: rgba(255, 244, 221, 0.9);
+    color: var(--reader-body, rgba(47, 38, 29, 0.9));
   }
 
   .dialogue-strip {
@@ -205,8 +205,8 @@
   .dialogue-strip article {
     padding: 16px;
     border-radius: 18px;
-    background: rgba(255, 248, 230, 0.05);
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    background: var(--reader-card-surface, rgba(244, 236, 225, 0.82));
+    border: 1px solid var(--reader-border, rgba(121, 103, 81, 0.14));
   }
 
   .dialogue-strip strong,
@@ -217,13 +217,13 @@
 
   .dialogue-strip span {
     margin-top: 4px;
-    color: #efc97f;
+    color: var(--reader-warm-accent, #9b6d39);
     font-size: 0.82rem;
   }
 
   .dialogue-strip p {
     margin: 10px 0 0;
-    color: rgba(255, 244, 221, 0.84);
+    color: var(--reader-body, rgba(47, 38, 29, 0.88));
     line-height: 1.7;
   }
 
@@ -236,9 +236,9 @@
   .rule-pills span {
     padding: 8px 12px;
     border-radius: 999px;
-    background: rgba(213, 140, 52, 0.16);
-    border: 1px solid rgba(213, 140, 52, 0.2);
-    color: #ffdca8;
+    background: rgba(181, 135, 78, 0.12);
+    border: 1px solid rgba(181, 135, 78, 0.2);
+    color: var(--reader-warm-accent, #9b6d39);
     font-size: 0.8rem;
   }
 
@@ -247,7 +247,7 @@
     gap: 16px;
     padding: 18px;
     border-radius: 24px;
-    background: var(--reader-panel-surface, rgba(19, 18, 21, 0.92));
+    background: var(--reader-panel-surface, rgba(253, 250, 245, 0.96));
     border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.08));
   }
 
@@ -261,7 +261,7 @@
     border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.08));
     border-radius: 20px;
     background: var(--reader-card-surface, rgba(255, 248, 230, 0.04));
-    color: #fff4dd;
+    color: var(--reader-title, #2f261d);
     font: inherit;
     cursor: pointer;
     transition:
@@ -278,8 +278,8 @@
   .choices button:hover,
   .secondary:hover {
     transform: translateY(-1px);
-    border-color: rgba(240, 198, 126, 0.22);
-    background: rgba(255, 248, 230, 0.08);
+    border-color: rgba(151, 117, 77, 0.22);
+    background: rgba(255, 255, 255, 0.72);
   }
 
   .choices button strong,
@@ -289,12 +289,12 @@
 
   .choices button span {
     margin-top: 6px;
-    color: rgba(255, 243, 214, 0.6);
+    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
     font-size: 0.82rem;
   }
 
   .choices button.locked {
-    border-color: rgba(212, 116, 91, 0.26);
+    border-color: rgba(177, 77, 59, 0.26);
   }
 
   .free-input {
@@ -309,15 +309,15 @@
 
   label span {
     font-size: 0.82rem;
-    color: rgba(255, 243, 214, 0.78);
+    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
   }
 
   textarea {
     min-height: 94px;
     border-radius: 18px;
     border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.1));
-    background: rgba(15, 11, 9, 0.92);
-    color: #fff4dd;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--reader-body, rgba(47, 38, 29, 0.9));
     font: inherit;
     padding: 14px 16px;
     resize: vertical;
@@ -329,7 +329,7 @@
 
   .error {
     margin: 0;
-    color: #ffb2a6;
+    color: var(--reader-danger, #b14d3b);
   }
 
   @media (max-width: 720px) {
