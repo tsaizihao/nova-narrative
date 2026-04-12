@@ -114,11 +114,11 @@
     gap: 18px;
     padding: 24px;
     border-radius: 30px;
-    border: 1px solid rgba(255, 243, 214, 0.08);
+    border: 1px solid var(--reader-border, rgba(255, 243, 214, 0.08));
     background:
       linear-gradient(180deg, rgba(10, 10, 14, 0.42), rgba(10, 10, 14, 0.82)),
       radial-gradient(circle at top, rgba(227, 196, 129, 0.14), transparent 35%),
-      rgba(10, 10, 14, 0.92);
+      var(--reader-shell-surface, rgba(10, 10, 14, 0.92));
     box-shadow: 0 22px 48px rgba(0, 0, 0, 0.26);
   }
 
@@ -181,7 +181,7 @@
     border-radius: 26px;
     background:
       linear-gradient(180deg, rgba(19, 18, 21, 0.7), rgba(19, 18, 21, 0.88)),
-      rgba(14, 11, 9, 0.74);
+      var(--reader-panel-surface, rgba(14, 11, 9, 0.74));
     min-height: 420px;
   }
 
@@ -247,8 +247,8 @@
     gap: 16px;
     padding: 18px;
     border-radius: 24px;
-    background: rgba(19, 18, 21, 0.92);
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    background: var(--reader-panel-surface, rgba(19, 18, 21, 0.92));
+    border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.08));
   }
 
   .choices {
@@ -258,9 +258,9 @@
 
   .choices button,
   .secondary {
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.08));
     border-radius: 20px;
-    background: rgba(255, 248, 230, 0.04);
+    background: var(--reader-card-surface, rgba(255, 248, 230, 0.04));
     color: #fff4dd;
     font: inherit;
     cursor: pointer;
@@ -315,7 +315,7 @@
   textarea {
     min-height: 94px;
     border-radius: 18px;
-    border: 1px solid rgba(255, 238, 207, 0.1);
+    border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.1));
     background: rgba(15, 11, 9, 0.92);
     color: #fff4dd;
     font: inherit;

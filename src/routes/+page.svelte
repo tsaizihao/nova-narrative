@@ -4,10 +4,10 @@
   import BuildProgressScreen from '$lib/components/BuildProgressScreen.svelte';
   import EndingScreen from '$lib/components/EndingScreen.svelte';
   import ImportScreen from '$lib/components/ImportScreen.svelte';
-  import PhaseStepper from '$lib/components/PhaseStepper.svelte';
-import ReaderDesktopShell from '$lib/components/ReaderDesktopShell.svelte';
-import ReaderMobileShell from '$lib/components/ReaderMobileShell.svelte';
-import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
+  import ReaderDesktopShell from '$lib/components/ReaderDesktopShell.svelte';
+  import ReaderMobileShell from '$lib/components/ReaderMobileShell.svelte';
+  import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
+  import WorkspaceTopbar from '$lib/components/WorkspaceTopbar.svelte';
   import { api } from '$lib/api/client';
   import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
@@ -405,92 +405,92 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
 </script>
 
 <svelte:head>
-  <title>Nova Narrative</title>
+  <title>叙世者</title>
 </svelte:head>
 
 <div class="page-shell">
   <div class="page-glow page-glow-left"></div>
   <div class="page-glow page-glow-right"></div>
 
-  {#if phase !== 'review'}
-    <header class="topbar">
-      <div>
-        <p>Nova Narrative</p>
-        <strong>小说改编工作台</strong>
-      </div>
-      <div class="topbar-meta">
-        <span>{project?.name ?? '单本项目制'}</span>
-        <PhaseStepper phase={stepperPhase} labels={phaseLabels} />
-      </div>
-    </header>
-  {/if}
-
-  {#if phase === 'import'}
-    <ImportScreen
-      {projectName}
-      {novelText}
-      {busy}
-      {error}
-      {aiSettings}
-      {aiDraft}
-      {settingsBusy}
-      on:submit={initializeStory}
-      on:sample={fillSample}
-      on:updateProjectName={(event) => (projectName = event.detail)}
-      on:updateNovelText={(event) => (novelText = event.detail)}
-      on:updateAiProvider={(event) => updateAiProvider(event.detail)}
-      on:updateAiBaseUrl={(event) => updateActiveAiField('base_url', event.detail)}
-      on:updateAiModel={(event) => updateActiveAiField('model', event.detail)}
-      on:updateAiApiKey={(event) => updateActiveAiField('api_key', event.detail)}
-      on:saveAiSettings={persistAiSettings}
-      on:clearProviderApiKey={(event) => clearProviderApiKey(event.detail)}
-    />
-  {:else if phase === 'building'}
-    <BuildProgressScreen projectName={project?.name ?? projectName} {buildStatus} />
-  {:else if phase === 'review' && project}
-    <ReviewStageShell
-      {project}
-      {lorePreview}
-      {rulePreview}
-      {error}
-      {busy}
-      on:enterStory={enterStory}
-      on:saveCharacter={saveCharacter}
-      on:saveWorldBook={saveWorldBook}
-      on:deleteWorldBook={deleteWorldBook}
-      on:saveRule={saveRule}
-      on:deleteRule={deleteRule}
-    />
-  {:else if phase === 'reader' && payload && activeSession}
-    {#if readerLayoutMode === 'desktop'}
-      <ReaderDesktopShell
-        {payload}
-        codex={codex}
-        session={activeSession}
-        {freeInput}
-        {busy}
-        {error}
-        on:choose={(event) => choose(event.detail)}
-        on:freeInputChange={(event) => (freeInput = event.detail)}
-        on:submitFreeInput={submitFreeInput}
-        on:rewind={(event) => rewind(event.detail)}
-      />
-    {:else}
-      <ReaderMobileShell
-        {payload}
-        codex={codex}
-        {freeInput}
-        {busy}
-        {error}
-        on:choose={(event) => choose(event.detail)}
-        on:freeInputChange={(event) => (freeInput = event.detail)}
-        on:submitFreeInput={submitFreeInput}
-        on:rewind={(event) => rewind(event.detail)}
+  <div class="content-frame" data-phase={phase}>
+    {#if phase !== 'review'}
+      <WorkspaceTopbar
+        eyebrow={phase === 'reader' || phase === 'ending' ? 'reader' : '叙世者'}
+        title={phase === 'reader' || phase === 'ending' ? '互动故事' : '小说改编工作台'}
+        metaLabel={project?.name ?? '单本项目制'}
+        phase={stepperPhase}
+        labels={phaseLabels}
+        showStepper={phase !== 'reader' && phase !== 'ending'}
       />
     {/if}
-  {:else if phase === 'ending' && payload && activeSession && payload.session.ending_report}
-    <EndingScreen ending={payload.session.ending_report} session={activeSession} on:rewind={(event) => rewind(event.detail)} />
-  {/if}
+
+    {#if phase === 'import'}
+      <ImportScreen
+        {projectName}
+        {novelText}
+        {busy}
+        {error}
+        {aiSettings}
+        {aiDraft}
+        {settingsBusy}
+        on:submit={initializeStory}
+        on:sample={fillSample}
+        on:updateProjectName={(event) => (projectName = event.detail)}
+        on:updateNovelText={(event) => (novelText = event.detail)}
+        on:updateAiProvider={(event) => updateAiProvider(event.detail)}
+        on:updateAiBaseUrl={(event) => updateActiveAiField('base_url', event.detail)}
+        on:updateAiModel={(event) => updateActiveAiField('model', event.detail)}
+        on:updateAiApiKey={(event) => updateActiveAiField('api_key', event.detail)}
+        on:saveAiSettings={persistAiSettings}
+        on:clearProviderApiKey={(event) => clearProviderApiKey(event.detail)}
+      />
+    {:else if phase === 'building'}
+      <BuildProgressScreen projectName={project?.name ?? projectName} {buildStatus} />
+    {:else if phase === 'review' && project}
+      <ReviewStageShell
+        {project}
+        {lorePreview}
+        {rulePreview}
+        {error}
+        {busy}
+        on:enterStory={enterStory}
+        on:saveCharacter={saveCharacter}
+        on:saveWorldBook={saveWorldBook}
+        on:deleteWorldBook={deleteWorldBook}
+        on:saveRule={saveRule}
+        on:deleteRule={deleteRule}
+      />
+    {:else if phase === 'reader' && payload && activeSession}
+      {#if readerLayoutMode === 'desktop'}
+        <ReaderDesktopShell
+          {payload}
+          codex={codex}
+          session={activeSession}
+          {freeInput}
+          {busy}
+          {error}
+          on:choose={(event) => choose(event.detail)}
+          on:freeInputChange={(event) => (freeInput = event.detail)}
+          on:submitFreeInput={submitFreeInput}
+          on:rewind={(event) => rewind(event.detail)}
+        />
+      {:else}
+        <ReaderMobileShell
+          {payload}
+          codex={codex}
+          {freeInput}
+          {busy}
+          {error}
+          on:choose={(event) => choose(event.detail)}
+          on:freeInputChange={(event) => (freeInput = event.detail)}
+          on:submitFreeInput={submitFreeInput}
+          on:rewind={(event) => rewind(event.detail)}
+        />
+      {/if}
+    {:else if phase === 'ending' && payload && activeSession && payload.session.ending_report}
+      <EndingScreen ending={payload.session.ending_report} session={activeSession} on:rewind={(event) => rewind(event.detail)} />
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -518,6 +518,24 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
     padding: 28px;
   }
 
+  .content-frame {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 22px;
+    width: min(1280px, 100%);
+    margin: 0 auto;
+  }
+
+  .content-frame[data-phase='review'] {
+    width: min(1440px, 100%);
+  }
+
+  .content-frame[data-phase='reader'],
+  .content-frame[data-phase='ending'] {
+    width: min(1360px, 100%);
+  }
+
   .page-glow {
     position: absolute;
     border-radius: 999px;
@@ -538,66 +556,6 @@ import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
     width: 280px;
     height: 280px;
     background: rgba(181, 149, 113, 0.18);
-  }
-
-  .topbar {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 18px;
-    margin: 0 auto 22px;
-    width: min(1280px, 100%);
-    padding: 16px 20px;
-    border-radius: 24px;
-    border: 1px solid rgba(121, 103, 81, 0.14);
-    background: rgba(250, 246, 239, 0.86);
-    box-shadow: 0 16px 36px rgba(70, 54, 39, 0.08);
-    backdrop-filter: blur(14px);
-  }
-
-  .topbar p,
-  .topbar strong,
-  .topbar span {
-    margin: 0;
-  }
-
-  .topbar p {
-    font-size: 0.72rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: #91765d;
-  }
-
-  .topbar strong {
-    display: block;
-    margin-top: 5px;
-    font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: 1.35rem;
-  }
-
-  .topbar-meta {
-    display: grid;
-    justify-items: end;
-    gap: 10px;
-  }
-
-  .topbar span {
-    color: rgba(63, 47, 35, 0.64);
-    font-size: 0.9rem;
-  }
-
-  @media (max-width: 1200px) {
-    .topbar {
-      display: grid;
-      grid-template-columns: 1fr;
-      align-items: flex-start;
-    }
-
-    .topbar-meta {
-      justify-items: start;
-    }
   }
 
   @media (max-width: 900px) {

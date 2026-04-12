@@ -34,15 +34,20 @@
 
 <style>
   .reader-desktop {
+    --reader-shell-surface: rgba(15, 13, 16, 0.92);
+    --reader-panel-surface: rgba(28, 24, 25, 0.88);
+    --reader-card-surface: rgba(255, 248, 230, 0.05);
+    --reader-border: rgba(255, 243, 214, 0.08);
+    --reader-rail-width: 272px;
     display: grid;
-    grid-template-columns: minmax(240px, 280px) minmax(0, 760px) minmax(240px, 280px);
-    justify-content: center;
-    gap: 18px;
+    grid-template-columns: var(--reader-rail-width) minmax(0, 1fr) var(--reader-rail-width);
+    gap: 20px;
     align-items: start;
   }
 
   .stage-column {
     min-width: 0;
+    max-width: 780px;
   }
 
   .rail {

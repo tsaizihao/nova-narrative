@@ -64,8 +64,8 @@
     align-content: start;
     padding: 18px;
     border-radius: 24px;
-    border: 1px solid rgba(255, 243, 214, 0.08);
-    background: rgba(12, 11, 15, 0.88);
+    border: 1px solid var(--reader-border, rgba(255, 243, 214, 0.08));
+    background: var(--reader-shell-surface, rgba(12, 11, 15, 0.88));
     box-shadow: 0 18px 34px rgba(0, 0, 0, 0.22);
   }
 
@@ -108,7 +108,7 @@
   article {
     padding: 14px;
     border-radius: 16px;
-    background: rgba(255, 248, 230, 0.05);
+    background: var(--reader-card-surface, rgba(255, 248, 230, 0.05));
     border: 1px solid rgba(255, 238, 207, 0.06);
   }
 
@@ -138,7 +138,7 @@
   .chips span {
     padding: 8px 12px;
     border-radius: 999px;
-    background: rgba(255, 248, 230, 0.05);
+    background: var(--reader-card-surface, rgba(255, 248, 230, 0.05));
     color: rgba(255, 243, 214, 0.78);
     font-size: 0.78rem;
   }

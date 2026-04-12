@@ -122,4 +122,22 @@ describe('ImportScreen', () => {
 
     expect(screen.getByRole('button', { name: '开始解析与改编' })).toBeEnabled();
   });
+
+  it('renders a support rail so the desktop import view is not left with an empty column', () => {
+    render(ImportScreen, {
+      props: {
+        projectName: '临川夜话',
+        novelText: '第1章 雨夜来客',
+        busy: false,
+        error: '',
+        aiSettings,
+        aiDraft,
+        settingsBusy: false
+      }
+    });
+
+    expect(screen.getByText('导入提示')).toBeInTheDocument();
+    expect(screen.getAllByText('优先粘贴完整章节正文')).toHaveLength(2);
+    expect(screen.getByText('这一步会产出')).toBeInTheDocument();
+  });
 });

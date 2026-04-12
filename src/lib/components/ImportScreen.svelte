@@ -96,15 +96,54 @@
 </script>
 
 <section class="workspace-hero">
-  <div class="copy">
-    <p class="eyebrow">Import</p>
-    <h1>先导入小说，再让系统开始改编</h1>
-    <p class="lede">
-      把纯文本贴进来，下一步就是解析人物、世界、规则和可互动场景。
-    </p>
-    <p class="support-copy">
-      审阅阶段还能继续校正角色、世界书和规则，然后再进入互动试玩。
-    </p>
+  <div class="support-rail">
+    <div class="copy">
+      <p class="eyebrow">Import</p>
+      <h1>先导入小说，再让系统开始改编</h1>
+      <p class="lede">
+        把纯文本贴进来，下一步就是解析人物、世界、规则和可互动场景。
+      </p>
+      <p class="support-copy">
+        审阅阶段还能继续校正角色、世界书和规则，然后再进入互动试玩。
+      </p>
+    </div>
+
+    <section class="support-panel">
+      <div>
+        <p class="label">导入提示</p>
+        <h3>优先粘贴完整章节正文</h3>
+      </div>
+
+      <div class="support-list">
+        <article>
+          <strong>保留章节标题与空行</strong>
+          <p>这样更容易切分结构，也更利于后续生成起始场景。</p>
+        </article>
+        <article>
+          <strong>优先粘贴完整章节正文</strong>
+          <p>不要只贴设定摘要，正文里的行动和关系变化才是互动化的基础。</p>
+        </article>
+        <article>
+          <strong>这一步会产出</strong>
+          <p>角色卡、世界书和规则草案会在审阅阶段继续校正，不需要一次写完。</p>
+        </article>
+      </div>
+
+      <div class="outcome-grid">
+        <div>
+          <span>角色卡</span>
+          <strong>人物与动机</strong>
+        </div>
+        <div>
+          <span>世界书</span>
+          <strong>地点与设定</strong>
+        </div>
+        <div>
+          <span>规则</span>
+          <strong>约束与后果</strong>
+        </div>
+      </div>
+    </section>
   </div>
 
   <div class="composer">
@@ -246,13 +285,20 @@
 <style>
   .workspace-hero {
     display: grid;
-    grid-template-columns: 1.05fr 0.95fr;
+    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
     gap: 28px;
     align-items: start;
   }
 
+  .support-rail {
+    display: grid;
+    gap: 18px;
+    align-content: start;
+  }
+
   .copy,
-  .composer {
+  .composer,
+  .support-panel {
     border-radius: 28px;
     border: 1px solid rgba(121, 103, 81, 0.14);
     background: rgba(248, 243, 234, 0.94);
@@ -267,6 +313,12 @@
     padding: 32px;
     display: grid;
     gap: 16px;
+  }
+
+  .support-panel {
+    display: grid;
+    gap: 18px;
+    padding: 28px;
   }
 
   .eyebrow,
@@ -320,6 +372,62 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 16px;
+  }
+
+  .support-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .support-list article {
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.56);
+    border: 1px solid rgba(121, 103, 81, 0.08);
+  }
+
+  .support-list strong,
+  .support-list p {
+    display: block;
+  }
+
+  .support-list strong {
+    color: #2f261d;
+  }
+
+  .support-list p {
+    margin: 8px 0 0;
+    line-height: 1.65;
+    color: rgba(63, 47, 35, 0.68);
+    font-size: 0.92rem;
+  }
+
+  .outcome-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .outcome-grid div {
+    padding: 14px 14px 16px;
+    border-radius: 18px;
+    background: rgba(121, 103, 81, 0.06);
+  }
+
+  .outcome-grid span,
+  .outcome-grid strong {
+    display: block;
+  }
+
+  .outcome-grid span {
+    color: #91765d;
+    font-size: 0.78rem;
+  }
+
+  .outcome-grid strong {
+    margin-top: 8px;
+    color: #2f261d;
+    font-size: 0.98rem;
   }
 
   label {
@@ -454,11 +562,16 @@
     }
 
     .copy,
-    .composer {
+    .composer,
+    .support-panel {
       padding: 26px;
     }
 
     .provider-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .outcome-grid {
       grid-template-columns: 1fr;
     }
   }
