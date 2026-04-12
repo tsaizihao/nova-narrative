@@ -24,3 +24,9 @@
 - 当前仓库重点在验证“小说导入 -> 结构化提炼 -> 审阅 -> 互动游玩”的整体链路
 - 现阶段不承诺兼容性、稳定性或可持续的数据格式
 - 在 README、界面或分支结构发生变化时，都属于正常的早期开发行为
+
+## 系统 Specification
+
+如果你想了解这个系统的目标产品定义、逻辑架构、模块边界、数据对象、命令接口和当前原型差距，请阅读系统级 specification：
+
+- [docs/system-specification.md](docs/system-specification.md)
