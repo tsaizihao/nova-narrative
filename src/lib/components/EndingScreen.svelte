@@ -9,7 +9,7 @@
   const dispatch = createEventDispatcher<{ rewind: string }>();
 </script>
 
-<section class="ending">
+<section class="ending" data-tone="paper">
   <div class="hero">
     <p class="eyebrow">Ending Report</p>
     <h2>{ending.ending_type}</h2>
@@ -49,19 +49,34 @@
 
 <style>
   .ending {
+    --reader-shell-surface: rgba(248, 243, 234, 0.96);
+    --reader-panel-surface: rgba(253, 250, 245, 0.96);
+    --reader-card-surface: rgba(244, 236, 225, 0.82);
+    --reader-chip-surface: rgba(121, 103, 81, 0.08);
+    --reader-border: rgba(121, 103, 81, 0.14);
+    --reader-shadow: 0 18px 36px rgba(70, 54, 39, 0.08);
+    --reader-title: #2f261d;
+    --reader-body: rgba(47, 38, 29, 0.9);
+    --reader-muted: rgba(63, 47, 35, 0.64);
+    --reader-eyebrow: #91765d;
+    --reader-accent: #1f6a57;
+    --reader-accent-soft: rgba(31, 106, 87, 0.14);
+    --reader-warm-accent: #9b6d39;
     display: grid;
     gap: 24px;
     padding: 36px;
     border-radius: 30px;
-    border: 1px solid rgba(255, 243, 214, 0.1);
+    border: 1px solid var(--reader-border);
     background:
-      radial-gradient(circle at top left, rgba(245, 220, 171, 0.1), transparent 36%),
-      rgba(14, 11, 9, 0.84);
+      radial-gradient(circle at top left, rgba(215, 194, 166, 0.32), transparent 42%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(244, 236, 225, 0.7)),
+      var(--reader-shell-surface);
+    box-shadow: var(--reader-shadow);
   }
 
   .eyebrow {
     margin: 0 0 10px;
-    color: #d3b37b;
+    color: var(--reader-eyebrow);
     text-transform: uppercase;
     letter-spacing: 0.22em;
     font-size: 0.7rem;
@@ -71,12 +86,13 @@
     margin: 0 0 12px;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
     font-size: clamp(2.2rem, 4vw, 3.4rem);
+    color: var(--reader-title);
   }
 
   .hero p:last-child {
     margin: 0;
     line-height: 1.8;
-    color: rgba(255, 243, 214, 0.78);
+    color: var(--reader-body);
     max-width: 60ch;
   }
 
@@ -90,19 +106,22 @@
   .rewind {
     padding: 22px;
     border-radius: 22px;
-    background: rgba(27, 20, 16, 0.88);
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(248, 241, 231, 0.86)),
+      var(--reader-panel-surface);
+    border: 1px solid var(--reader-border);
   }
 
   strong {
     display: block;
     margin-bottom: 10px;
+    color: var(--reader-title);
   }
 
   ul {
     margin: 0;
     padding-left: 18px;
-    color: rgba(255, 243, 214, 0.74);
+    color: var(--reader-body);
     line-height: 1.8;
   }
 
@@ -113,13 +132,19 @@
   }
 
   .rewind-buttons button {
-    border: 1px solid rgba(255, 238, 207, 0.08);
+    border: 1px solid var(--reader-border);
     border-radius: 999px;
     padding: 10px 14px;
-    background: rgba(255, 248, 230, 0.04);
-    color: #f7e5bf;
+    background: var(--reader-card-surface);
+    color: var(--reader-title);
     font: inherit;
     cursor: pointer;
+  }
+
+  .rewind-buttons button:hover {
+    border-color: rgba(31, 106, 87, 0.24);
+    background: var(--reader-accent-soft);
+    color: var(--reader-accent);
   }
 
   @media (max-width: 860px) {
@@ -128,4 +153,3 @@
     }
   }
 </style>
-
