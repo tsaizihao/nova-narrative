@@ -6,6 +6,7 @@
     SaveAiSettingsInput
   } from '$lib/types';
   import type { SavedProjectCardEntry } from '$lib/modules/projects/library';
+  import { readImportedTextFile } from '$lib/text-import';
 
   export let projectName = '';
   export let novelText = '';
@@ -52,6 +53,8 @@
   const dispatch = createEventDispatcher<{
     submit: void;
     sample: void;
+    fileError: string;
+    fileLoaded: void;
     updateProjectName: string;
     updateNovelText: string;
     updateAiProvider: AiProviderKind;
@@ -80,6 +83,28 @@
     const textarea = event.currentTarget as HTMLTextAreaElement;
     syncNovelTextareaHeight(textarea);
     dispatch('updateNovelText', textarea.value);
+  }
+
+  async function handleFileSelection(event: Event) {
+    const target = event.currentTarget as HTMLInputElement;
+    const file = target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const imported = await readImportedTextFile(file);
+      if (!projectName.trim()) {
+        dispatch('updateProjectName', imported.suggestedName);
+      }
+      dispatch('updateNovelText', imported.content);
+      dispatch('fileLoaded');
+    } catch (caught) {
+      dispatch('fileError', caught instanceof Error ? caught.message : '读取 txt 文件失败');
+    } finally {
+      target.value = '';
+    }
   }
 
   onMount(() => {
@@ -194,10 +219,18 @@
         <p class="label">新项目</p>
         <h2>导入小说文本</h2>
       </div>
-      <button type="button" class="ghost" on:click={() => dispatch('sample')} disabled={busy}>
-        载入示例
-      </button>
+      <div class="head-actions">
+        <label class="ghost file-trigger">
+          <input type="file" accept=".txt,text/plain" on:change={handleFileSelection} disabled={busy} />
+          <span>导入 .txt</span>
+        </label>
+        <button type="button" class="ghost" on:click={() => dispatch('sample')} disabled={busy}>
+          载入示例
+        </button>
+      </div>
     </div>
+
+    <p class="file-help">支持中文纯文本 `.txt`，读取成功后会直接填入下方文本框。</p>
 
     <label>
       <span>项目名称</span>
@@ -421,6 +454,30 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 16px;
+  }
+
+  .head-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .file-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .file-trigger input {
+    display: none;
+  }
+
+  .file-help {
+    margin: -4px 0 0;
+    color: rgba(92, 73, 55, 0.72);
+    font-size: 0.9rem;
   }
 
   .support-list {

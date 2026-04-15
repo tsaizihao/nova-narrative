@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ImportScreen from './ImportScreen.svelte';
 import type { AppAiSettingsSnapshot, NovelProject, SaveAiSettingsInput } from '$lib/types';
@@ -293,5 +293,77 @@ describe('ImportScreen', () => {
     expect(screen.getByRole('button', { name: '继续互动临川夜话' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '查看结局归潮纪' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '进入审阅霜桥夜行' })).toBeInTheDocument();
+  });
+
+  it('accepts txt file import and emits the filled project name and text', async () => {
+    const updates: string[] = [];
+    const loaded = vi.fn();
+
+    render(ImportScreen, {
+      props: {
+        projectName: '',
+        novelText: '',
+        busy: false,
+        error: '',
+        aiSettings,
+        aiDraft,
+        resumableProjects: [],
+        settingsBusy: false
+      },
+      events: {
+        updateProjectName: (event) => updates.push(`name:${event.detail}`),
+        updateNovelText: (event) => updates.push(`text:${event.detail}`),
+        fileLoaded: loaded
+      }
+    });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['第1章 雨夜来客\n\n沈砚站在门前。'], '临川夜话.txt', {
+      type: 'text/plain'
+    });
+
+    await fireEvent.change(fileInput, {
+      target: {
+        files: [file]
+      }
+    });
+
+    await waitFor(() => {
+      expect(updates).toContain('name:临川夜话');
+      expect(updates).toContain('text:第1章 雨夜来客\n\n沈砚站在门前。');
+      expect(loaded).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('surfaces txt file import errors through the component event channel', async () => {
+    const fileError = vi.fn();
+
+    render(ImportScreen, {
+      props: {
+        projectName: '',
+        novelText: '',
+        busy: false,
+        error: '',
+        aiSettings,
+        aiDraft,
+        resumableProjects: [],
+        settingsBusy: false
+      },
+      events: {
+        fileError
+      }
+    });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['# not txt'], 'story.md', { type: 'text/markdown' });
+
+    await fireEvent.change(fileInput, {
+      target: {
+        files: [file]
+      }
+    });
+
+    expect(fileError).toHaveBeenCalledTimes(1);
+    expect(fileError.mock.calls[0]?.[0]?.detail).toBe('目前只支持导入 .txt 纯文本文件');
   });
 });

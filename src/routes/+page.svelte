@@ -373,6 +373,12 @@
         {settingsBusy}
         on:submit={initializeStory}
         on:sample={fillSample}
+        on:fileLoaded={() => {
+          error = '';
+        }}
+        on:fileError={(event) => {
+          error = event.detail;
+        }}
         on:updateProjectName={(event) => (projectName = event.detail)}
         on:updateNovelText={(event) => (novelText = event.detail)}
         on:updateAiProvider={(event) => updateAiProvider(event.detail)}
