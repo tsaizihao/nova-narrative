@@ -10,8 +10,14 @@ import type {
   ExternalProviderSettingsInput,
   LoreLifecycleRecord,
   NovelProject,
+  ProjectedOutcomePreview,
   RuleDefinition,
   RuleEvaluationResult,
+  ReviewPreviewContext,
+  ReviewPreviewExplanations,
+  ReviewPreviewSnapshot,
+  RuntimeSnapshot,
+  SavedProjectLibraryEntry,
   SaveAiSettingsInput,
   SceneNode,
   ScenePayload,
@@ -26,6 +32,8 @@ import type {
 const projects = new Map<string, NovelProject>();
 const packages = new Map<string, StoryPackage>();
 const sessions = new Map<string, SessionState>();
+const projectActivityAt = new Map<string, number>();
+const sessionActivityAt = new Map<string, number>();
 const providerApiKeys: Record<Exclude<AiProviderKind, 'heuristic'>, string> = {
   openai_compatible: '',
   openrouter: ''
@@ -44,10 +52,24 @@ let aiSettings: AppAiSettingsSnapshot = {
   }
 };
 let counter = 0;
+let activityClock = Date.now();
 
 function nextId(prefix: string) {
   counter += 1;
   return `${prefix}-${counter}`;
+}
+
+function nextActivityAt() {
+  activityClock = Math.max(activityClock + 1_000, Date.now());
+  return activityClock;
+}
+
+function touchProject(projectId: string) {
+  projectActivityAt.set(projectId, nextActivityAt());
+}
+
+function touchSession(sessionId: string) {
+  sessionActivityAt.set(sessionId, nextActivityAt());
 }
 
 function clone<T>(value: T): T {
@@ -65,6 +87,15 @@ function normalizeProviderInput(input: ExternalProviderSettingsInput, fallbackBa
   };
 }
 
+function sanitizeNovelText(input: string) {
+  return input
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
+}
+
 function isExternalProviderComplete(settings: AppAiSettingsSnapshot) {
   if (settings.selected_provider === 'heuristic') return true;
   const active =
@@ -79,6 +110,58 @@ function splitChapterLines(text: string) {
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+function clearProjectBuildOutputs(project: NovelProject): NovelProject {
+  return {
+    ...project,
+    story_package: null,
+    character_cards: [],
+    worldbook_entries: [],
+    rules: []
+  };
+}
+
+function hasUsableImportedSource(project: NovelProject) {
+  return Boolean(project.raw_text.trim() && project.chapters.length > 0);
+}
+
+function failProjectBuild(project: NovelProject, message: string, progress: number, error: string) {
+  const failed: NovelProject = {
+    ...project,
+    build_status: {
+      stage: 'failed',
+      message,
+      progress,
+      error
+    }
+  };
+  projects.set(project.id, failed);
+  touchProject(project.id);
+  return failed;
+}
+
+function invalidateProjectSessions(projectId: string) {
+  for (const [sessionId, session] of sessions.entries()) {
+    if (session.project_id === projectId) {
+      sessions.delete(sessionId);
+      sessionActivityAt.delete(sessionId);
+    }
+  }
+}
+
+function getLatestProjectSession(projectId: string) {
+  return Array.from(sessions.values())
+    .filter((session) => session.project_id === projectId)
+    .sort((left, right) => {
+      const activityOrder =
+        (sessionActivityAt.get(right.session_id) ?? 0) - (sessionActivityAt.get(left.session_id) ?? 0);
+      if (activityOrder !== 0) {
+        return activityOrder;
+      }
+
+      return right.session_id.localeCompare(left.session_id);
+    })[0];
 }
 
 function buildProject(name: string): NovelProject {
@@ -605,17 +688,21 @@ function evaluateRules(
   storyState: StoryState,
   storyPackage: StoryPackage,
   eventKind: string,
-  sourceText: string
+  sourceText: string,
+  actorGender?: string,
+  targetGender?: string
 ): RuleEvaluationResult {
   const activeRules: ActiveRuleHit[] = [];
   const nextState = clone(storyState);
   let blocked = false;
-  const actorGender = sourceText.includes('一男一女') ? 'male' : 'male';
-  const targetGender = sourceText.includes('一男一女')
-    ? 'female'
-    : sourceText.includes('两个男性') || sourceText.includes('男男')
-      ? 'male'
-      : 'female';
+  const resolvedActorGender = actorGender ?? 'male';
+  const resolvedTargetGender =
+    targetGender ??
+    (sourceText.includes('一男一女')
+      ? 'female'
+      : sourceText.includes('两个男性') || sourceText.includes('男男')
+        ? 'male'
+        : 'female');
   const sceneTime = sourceText.includes('午夜') ? 'midnight' : 'day';
 
   for (const rule of storyPackage.world_model.rules) {
@@ -625,9 +712,9 @@ function evaluateRules(
         condition.fact === 'event.kind'
           ? eventKind
           : condition.fact === 'actor.gender'
-            ? actorGender
+            ? resolvedActorGender
             : condition.fact === 'target.gender'
-              ? targetGender
+              ? resolvedTargetGender
               : condition.fact === 'scene.time'
                 ? sceneTime
                 : sourceText;
@@ -665,6 +752,122 @@ function evaluateRules(
     story_state: nextState,
     active_rules: activeRules,
     blocked
+  };
+}
+
+function createPreviewActorFallback() {
+  return {
+    id: '',
+    name: '',
+    gender: 'unknown',
+    age: null,
+    identity: '',
+    faction: '',
+    role: '',
+    summary: '',
+    desire: '',
+    secrets: [],
+    traits: [],
+    abilities: [],
+    mutable_state: {}
+  };
+}
+
+function resolvePreviewActor(storyPackage: StoryPackage, explicitId?: string | null) {
+  return (
+    (explicitId
+      ? storyPackage.world_model.character_cards.find((card) => card.id === explicitId)
+      : undefined) ??
+    storyPackage.world_model.character_cards[0] ??
+    createPreviewActorFallback()
+  );
+}
+
+function resolvePreviewTarget(
+  storyPackage: StoryPackage,
+  actorId: string,
+  explicitId?: string | null
+) {
+  return (
+    (explicitId
+      ? storyPackage.world_model.character_cards.find((card) => card.id === explicitId)
+      : undefined) ??
+    storyPackage.world_model.character_cards.find((card) => card.id !== actorId) ??
+    resolvePreviewActor(storyPackage, actorId)
+  );
+}
+
+function buildProjectedOutcome(
+  scene: SceneNode,
+  storyPackage: StoryPackage,
+  rulePreview: RuleEvaluationResult
+): ProjectedOutcomePreview {
+  if (rulePreview.blocked) {
+    return {
+      blocked: true,
+      staysOnScene: true,
+      nextSceneId: null,
+      nextSceneTitle: null,
+      nextSceneSummary: null,
+      candidateChoices: []
+    };
+  }
+
+  const nextSceneId =
+    scene.candidate_choices.find((choice) => choice.next_scene_id.trim())?.next_scene_id ??
+    scene.fallback_next ??
+    null;
+
+  if (!nextSceneId) {
+    return {
+      blocked: false,
+      staysOnScene: true,
+      nextSceneId: null,
+      nextSceneTitle: null,
+      nextSceneSummary: null,
+      candidateChoices: []
+    };
+  }
+
+  const nextScene = storyPackage.scenes[nextSceneId];
+  return {
+    blocked: false,
+    staysOnScene: false,
+    nextSceneId,
+    nextSceneTitle: nextScene?.title ?? null,
+    nextSceneSummary: nextScene?.summary ?? null,
+    candidateChoices:
+      nextScene?.candidate_choices.map((choice) => ({
+        id: choice.id,
+        label: choice.label,
+        intentTag: choice.intent_tag,
+        nextSceneId: choice.next_scene_id,
+        unlockConditions: [...choice.unlock_conditions]
+      })) ?? []
+  };
+}
+
+function buildPreviewExplanations(
+  lorePreview: ActiveLoreEntry[],
+  rulePreview: RuleEvaluationResult,
+  projectedOutcome: ProjectedOutcomePreview
+): ReviewPreviewExplanations {
+  return {
+    loreSummary: lorePreview.length ? `命中 ${lorePreview.length} 条 lore` : '没有新增 lore 命中',
+    ruleSummary: rulePreview.blocked
+      ? `存在 ${rulePreview.active_rules.length} 条激活规则，当前动作会被阻止`
+      : rulePreview.active_rules.length
+        ? `命中 ${rulePreview.active_rules.length} 条激活规则，但当前动作允许继续`
+        : '没有规则阻止当前动作',
+    outcomeSummary: projectedOutcome.blocked
+      ? '动作会停留在当前场景'
+      : projectedOutcome.staysOnScene
+        ? '当前上下文下不会推进到新场景'
+        : projectedOutcome.nextSceneTitle
+          ? `动作会推进到《${projectedOutcome.nextSceneTitle}》`
+          : projectedOutcome.nextSceneId
+            ? `动作会推进到 ${projectedOutcome.nextSceneId}`
+            : '当前上下文下不会推进到新场景'
   };
 }
 
@@ -798,6 +1001,7 @@ function rebuildProject(project: NovelProject): NovelProject {
   };
   packages.set(project.id, storyPackage);
   projects.set(project.id, updated);
+  touchProject(project.id);
   return updated;
 }
 
@@ -852,14 +1056,77 @@ export const mockBackend = {
   async create_project(name: string) {
     const project = buildProject(name);
     projects.set(project.id, project);
+    touchProject(project.id);
     return clone(project);
+  },
+
+  async list_projects() {
+    return clone(
+      Array.from(projects.values()).sort((left, right) => {
+        const readinessOrder = Number(Boolean(right.story_package)) - Number(Boolean(left.story_package));
+        if (readinessOrder !== 0) {
+          return readinessOrder;
+        }
+
+        const nameOrder = left.name.localeCompare(right.name);
+        if (nameOrder !== 0) {
+          return nameOrder;
+        }
+
+        return left.id.localeCompare(right.id);
+      })
+    );
+  },
+
+  async list_saved_projects(): Promise<SavedProjectLibraryEntry[]> {
+    return clone(
+      Array.from(projects.values())
+        .filter((project) => project.build_status.stage === 'ready' && Boolean(project.story_package))
+        .map((project) => {
+          const session = getLatestProjectSession(project.id);
+          const sessionId = session?.session_id ?? null;
+          const sceneTitle =
+            session && project.story_package
+              ? project.story_package.scenes[session.current_scene_id]?.title ?? null
+              : null;
+
+          return {
+            project,
+            session_id: sessionId,
+            current_scene_title: sceneTitle,
+            ending_type: session?.ending_report?.ending_type ?? null,
+            last_activity_at: sessionId
+              ? (sessionActivityAt.get(sessionId) ?? projectActivityAt.get(project.id) ?? 0)
+              : (projectActivityAt.get(project.id) ?? 0),
+            last_activity_kind: session?.ending_report ? 'ending' : sessionId ? 'session' : 'project'
+          } satisfies SavedProjectLibraryEntry;
+        })
+        .sort((left, right) => {
+          const activityOrder = right.last_activity_at - left.last_activity_at;
+          if (activityOrder !== 0) {
+            return activityOrder;
+          }
+
+          const nameOrder = left.project.name.localeCompare(right.project.name);
+          if (nameOrder !== 0) {
+            return nameOrder;
+          }
+
+          return left.project.id.localeCompare(right.project.id);
+        })
+    );
   },
 
   async import_novel_text(projectId: string, content: string) {
     const project = projects.get(projectId);
     if (!project) throw new Error('project not found');
 
-    const lines = splitChapterLines(content);
+    const sanitized = sanitizeNovelText(content);
+    if (!sanitized) {
+      throw new Error('Novel text cannot be empty');
+    }
+
+    const lines = splitChapterLines(sanitized);
     const chapters = lines
       .map((line, index) =>
         line.startsWith('第')
@@ -877,43 +1144,73 @@ export const mockBackend = {
         return accumulator;
       }, []);
 
+    invalidateProjectSessions(projectId);
+    packages.delete(projectId);
+
     const imported: NovelProject = {
-      ...project,
-      raw_text: content,
+      ...clearProjectBuildOutputs(project),
+      raw_text: sanitized,
       chapters,
       build_status: {
         stage: 'imported',
         message: 'Novel imported',
         progress: 20
-      },
-      story_package: null,
-      character_cards: [],
-      worldbook_entries: [],
-      rules: []
+      }
     };
 
     projects.set(projectId, imported);
+    touchProject(projectId);
     return clone(imported);
   },
 
   async build_story_package(projectId: string) {
     const project = projects.get(projectId);
     if (!project) throw new Error('project not found');
-    if (!isExternalProviderComplete(aiSettings)) {
-      throw new Error('需要填写 base URL、模型和 API key');
+    if (!hasUsableImportedSource(project)) {
+      failProjectBuild(
+        project,
+        '构建无法开始',
+        0,
+        'project must contain imported source text before build'
+      );
+      throw new Error('project must contain imported source text before build');
     }
 
-    const character_cards = buildCharacters();
-    const rules = buildRules();
-    const worldbook_entries = buildWorldBook(character_cards, rules);
-    const readyProject: NovelProject = rebuildProject({
+    const analyzingProject: NovelProject = {
       ...project,
-      character_cards,
-      worldbook_entries,
-      rules
-    });
+      build_status: {
+        stage: 'analyzing',
+        message: 'Analyzing source novel',
+        progress: 45
+      }
+    };
+    projects.set(projectId, analyzingProject);
 
-    return clone(readyProject.build_status as BuildStatus);
+    try {
+      if (!isExternalProviderComplete(aiSettings)) {
+        throw new Error('需要填写 base URL、模型和 API key');
+      }
+
+      const character_cards = buildCharacters();
+      const rules = buildRules();
+      const worldbook_entries = buildWorldBook(character_cards, rules);
+      const readyProject: NovelProject = rebuildProject({
+        ...analyzingProject,
+        character_cards,
+        worldbook_entries,
+        rules
+      });
+
+      return clone(readyProject.build_status as BuildStatus);
+    } catch (error) {
+      failProjectBuild(
+        analyzingProject,
+        '结构解析失败',
+        45,
+        error instanceof Error ? error.message : '未知错误'
+      );
+      throw error;
+    }
   },
 
   async get_build_status(projectId: string) {
@@ -932,6 +1229,10 @@ export const mockBackend = {
     const project = projects.get(projectId);
     if (!project) throw new Error('project not found');
     return clone(project);
+  },
+
+  async find_project_session(projectId: string) {
+    return clone(getLatestProjectSession(projectId) ?? null);
   },
 
   async start_session(projectId: string) {
@@ -963,6 +1264,7 @@ export const mockBackend = {
     session.story_state.checkpoints = [];
     session = captureCheckpoint(session, storyPackage.scenes[storyPackage.start_scene_id]);
     sessions.set(session.session_id, session);
+    touchSession(session.session_id);
     return clone(session);
   },
 
@@ -972,6 +1274,13 @@ export const mockBackend = {
     const storyPackage = packages.get(session.project_id);
     if (!storyPackage) throw new Error('story package not found');
     return buildPayload(session, storyPackage);
+  },
+
+  async get_runtime_snapshot(sessionId: string): Promise<RuntimeSnapshot> {
+    return {
+      payload: await this.get_current_scene(sessionId),
+      codex: await this.get_story_codex(sessionId)
+    };
   },
 
   async submit_choice(sessionId: string, choiceId: string) {
@@ -1039,6 +1348,7 @@ export const mockBackend = {
     );
     nextSession = captureCheckpoint(nextSession, nextScene);
     sessions.set(sessionId, nextSession);
+    touchSession(sessionId);
     return buildPayload(nextSession, storyPackage);
   },
 
@@ -1079,6 +1389,7 @@ export const mockBackend = {
       lore_lifecycle: syncLoreLifecycle(nextSession, storyPackage, activeLore)
     };
     sessions.set(sessionId, updated);
+    touchSession(sessionId);
     return buildPayload(updated, storyPackage);
   },
 
@@ -1176,6 +1487,52 @@ export const mockBackend = {
     return evaluateRules(emptyStoryState(scene.id), storyPackage, eventKind, inputText ?? scene.title);
   },
 
+  async preview_review_snapshot(projectId: string, context: ReviewPreviewContext) {
+    const storyPackage = packages.get(projectId);
+    if (!storyPackage) throw new Error('story package not found');
+    const scene = storyPackage.scenes[context.sceneId];
+    if (!scene) throw new Error('scene not found');
+
+    const actor = resolvePreviewActor(storyPackage, context.actorCharacterId);
+    const target = resolvePreviewTarget(storyPackage, actor.id, context.targetCharacterId);
+    const lorePreview = previewActiveLore(
+      storyPackage,
+      context.sceneId,
+      context.inputText,
+      seedLoreLifecycle(storyPackage)
+    );
+    const rulePreview = evaluateRules(
+      emptyStoryState(scene.id),
+      storyPackage,
+      context.eventKind,
+      context.inputText,
+      actor.gender,
+      target.gender
+    );
+    const projectedOutcome = buildProjectedOutcome(scene, storyPackage, rulePreview);
+    const explanations = buildPreviewExplanations(lorePreview, rulePreview, projectedOutcome);
+
+    return {
+      context: clone(context),
+      lorePreview,
+      rulePreview,
+      projectedOutcome,
+      explanations
+    } satisfies ReviewPreviewSnapshot;
+  },
+
+  async save_review_preview_context(projectId: string, context: ReviewPreviewContext) {
+    const project = projects.get(projectId);
+    if (!project) throw new Error('project not found');
+    const updated = {
+      ...project,
+      review_preview_context: clone(context)
+    };
+    projects.set(projectId, updated);
+    touchProject(projectId);
+    return clone(context);
+  },
+
   async rewind_to_checkpoint(sessionId: string, checkpointId: string) {
     const session = sessions.get(sessionId);
     if (!session) throw new Error('session not found');
@@ -1198,6 +1555,7 @@ export const mockBackend = {
       last_active_rules: clone(checkpoint.last_active_rules)
     };
     sessions.set(sessionId, nextSession);
+    touchSession(sessionId);
     return buildPayload(nextSession, storyPackage);
   },
 

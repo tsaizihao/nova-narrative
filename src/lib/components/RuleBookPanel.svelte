@@ -5,21 +5,26 @@
   import type { RuleDefinition } from '$lib/types';
 
   export let rules: RuleDefinition[] = [];
+  export let activeId: string | null = null;
+  export let draft: RuleDefinition | null = null;
+  export let dirty = false;
+  export let saveBusy = false;
+  export let deleteBusy = false;
 
-  const dispatch = createEventDispatcher<{ save: RuleDefinition; remove: string }>();
+  const dispatch = createEventDispatcher<{
+    select: string;
+    change: RuleDefinition;
+    save: void;
+    remove: void;
+  }>();
 
-  let drafts: RuleDefinition[] = [];
-  let previousRules: RuleDefinition[] = [];
-  let activeIndex = 0;
+  function updateDraft(patch: Partial<RuleDefinition>) {
+    if (!draft) return;
 
-  function cloneRule(rule: RuleDefinition): RuleDefinition {
-    return JSON.parse(JSON.stringify(rule)) as RuleDefinition;
-  }
-
-  $: if (rules !== previousRules) {
-    drafts = rules.map(cloneRule);
-    previousRules = rules;
-    activeIndex = Math.min(activeIndex, Math.max(rules.length - 1, 0));
+    dispatch('change', {
+      ...draft,
+      ...patch
+    });
   }
 </script>
 
@@ -32,14 +37,14 @@
     <p class="count">{rules.length} 条规则</p>
   </div>
 
-  {#if drafts.length}
+  {#if rules.length && draft}
     <div class="workspace">
       <div class="entity-list">
-        {#each drafts as rule, index}
+        {#each rules as rule}
           <button
             type="button"
-            class:active={index === activeIndex}
-            on:click={() => (activeIndex = index)}
+            class:active={rule.id === activeId}
+            on:click={() => dispatch('select', rule.id)}
           >
             <strong>{rule.name}</strong>
             <span class={`tone-${ruleBadgeTone(rule.priority)}`}>{rule.priority}</span>
@@ -51,11 +56,22 @@
         <div class="row">
           <label>
             <span>名称</span>
-            <input bind:value={drafts[activeIndex].name} />
+            <input
+              value={draft.name}
+              on:input={(event) =>
+                updateDraft({ name: (event.currentTarget as HTMLInputElement).value })}
+            />
           </label>
           <label>
             <span>优先级</span>
-            <select bind:value={drafts[activeIndex].priority}>
+            <select
+              value={draft.priority}
+              on:change={(event) =>
+                updateDraft({
+                  priority: (event.currentTarget as HTMLSelectElement)
+                    .value as RuleDefinition['priority']
+                })}
+            >
               <option value="hard_constraint">hard_constraint</option>
               <option value="soft_constraint">soft_constraint</option>
               <option value="consequence">consequence</option>
@@ -65,21 +81,51 @@
         </div>
         <label>
           <span>说明</span>
-          <textarea bind:value={drafts[activeIndex].explanation} rows="4"></textarea>
+          <textarea
+            rows="4"
+            value={draft.explanation}
+            on:input={(event) =>
+              updateDraft({ explanation: (event.currentTarget as HTMLTextAreaElement).value })}
+          ></textarea>
         </label>
         <label class="toggle">
           <span>启用</span>
-          <input type="checkbox" bind:checked={drafts[activeIndex].enabled} />
+          <input
+            type="checkbox"
+            checked={draft.enabled}
+            on:change={(event) =>
+              updateDraft({ enabled: (event.currentTarget as HTMLInputElement).checked })}
+          />
         </label>
         <div class="meta">
-          <p>条件：{drafts[activeIndex].conditions.map((condition) => `${condition.fact} ${condition.operator} ${condition.value}`).join(' / ') || '暂无条件'}</p>
-          <p>效果：{drafts[activeIndex].effects.map((effect) => `${effect.key}=${effect.value}`).join(' / ') || '暂无效果'}</p>
+          <p>
+            条件：
+            {draft.conditions
+              .map((condition) => `${condition.fact} ${condition.operator} ${condition.value}`)
+              .join(' / ') || '暂无条件'}
+          </p>
+          <p>
+            效果：
+            {draft.effects.map((effect) => `${effect.key}=${effect.value}`).join(' / ') ||
+              '暂无效果'}
+          </p>
         </div>
+        <p class="state">{dirty ? '有未保存更改' : '已与当前项目同步'}</p>
         <div class="actions">
-          <button type="button" class="primary" on:click={() => dispatch('save', drafts[activeIndex])}>
-            保存并刷新预览
+          <button
+            type="button"
+            class="primary"
+            disabled={saveBusy}
+            on:click={() => dispatch('save')}
+          >
+            保存更改
           </button>
-          <button type="button" class="ghost" on:click={() => dispatch('remove', drafts[activeIndex].id)}>
+          <button
+            type="button"
+            class="ghost"
+            disabled={deleteBusy}
+            on:click={() => dispatch('remove')}
+          >
             删除规则
           </button>
         </div>
@@ -118,7 +164,9 @@
 
   h3,
   .count,
-  .empty {
+  .empty,
+  .state,
+  .meta p {
     margin: 0;
   }
 
@@ -129,13 +177,19 @@
   }
 
   .count,
-  .empty {
+  .empty,
+  .state {
     color: rgba(63, 47, 35, 0.58);
+  }
+
+  .count,
+  .state,
+  .meta p {
+    font-size: 0.8rem;
   }
 
   .count {
     padding-top: 4px;
-    font-size: 0.8rem;
   }
 
   .workspace {
@@ -171,10 +225,8 @@
     color: #2f261d;
   }
 
-  .entity-list span,
-  .meta p {
+  .entity-list span {
     font-size: 0.82rem;
-    margin: 0;
   }
 
   .editor {
@@ -247,6 +299,12 @@
   .ghost {
     background: rgba(121, 103, 81, 0.08);
     color: #5f4f3e;
+  }
+
+  .primary:disabled,
+  .ghost:disabled {
+    cursor: progress;
+    opacity: 0.72;
   }
 
   .tone-danger {

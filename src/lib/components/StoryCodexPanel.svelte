@@ -8,6 +8,8 @@
   export let session: SessionState | null = null;
   export let activeLore: ActiveLoreEntry[] = [];
   export let activeRules: ActiveRuleHit[] = [];
+  export let busy = false;
+  export let busyLabel = '';
 
   const dispatch = createEventDispatcher<{ rewind: string }>();
   let activeTab: 'characters' | 'lore' | 'timeline' | 'choices' = 'lore';
@@ -82,9 +84,16 @@
       </article>
       <article>
         <strong>回溯节点</strong>
+        {#if busy && busyLabel}
+          <p class="checkpoint-status">{busyLabel}</p>
+        {/if}
         <div class="checkpoint-list">
           {#each session?.available_checkpoints ?? [] as checkpoint}
-            <button type="button" on:click={() => dispatch('rewind', checkpoint.checkpoint.id)}>
+            <button
+              type="button"
+              on:click={() => dispatch('rewind', checkpoint.checkpoint.id)}
+              disabled={busy}
+            >
               {checkpoint.checkpoint.label}
             </button>
           {/each}
@@ -224,9 +233,19 @@
     gap: 8px;
   }
 
+  .checkpoint-status {
+    margin: 8px 0 0;
+    color: var(--reader-accent, #1f6a57);
+  }
+
   .checkpoint-list button {
     min-height: 34px;
     padding: 0 12px;
     font-size: 0.8rem;
+  }
+
+  .checkpoint-list button:disabled {
+    cursor: wait;
+    opacity: 0.7;
   }
 </style>

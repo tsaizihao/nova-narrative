@@ -1,12 +1,8 @@
 use std::{
+    cmp::Reverse,
     collections::HashMap,
-    fs,
-    path::PathBuf,
     sync::Arc,
 };
-
-#[cfg(test)]
-use std::path::Path;
 
 use uuid::Uuid;
 
@@ -14,11 +10,17 @@ use crate::{
     analyzer::Analyzer,
     compiler::compile_story_package,
     error::{AppError, AppResult},
+    infra::{
+        AiSettingsRepository, PersistedAiSettings, ProjectRepository, RuntimeDataPaths,
+        SessionRepository,
+    },
     importer::{sanitize_text, split_novel_into_chapters},
     models::{
-        AiProviderKind, AppAiSettingsSnapshot, BuildStage, BuildStatus, CharacterCard,
-        ExternalProviderSettingsInput, ExternalProviderSettingsSnapshot, NovelProject, SaveAiSettingsInput,
-        ScenePayload, SessionState, StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
+        AiProviderKind, AppAiSettingsSnapshot, BuildStage, BuildStatus, CharacterCard, NovelProject,
+        ProjectedOutcomePreview, ProjectedSceneChoicePreview, ReviewPreviewContext,
+        ReviewPreviewExplanations, ReviewPreviewSnapshot, RuntimeSnapshot, SaveAiSettingsInput,
+        SavedProjectActivityKind, SavedProjectLibraryEntry, SceneNode, ScenePayload, SessionState,
+        StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
     },
     provider::{
         ChatCompletionsTransport, HeuristicStoryProvider, KeyringSecretStore,
@@ -30,143 +32,49 @@ use crate::{
     worldbook::{ActiveLoreEntry, WorldBookEntry},
 };
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct PersistedExternalProviderSettings {
-    base_url: String,
-    model: String,
-}
-
-impl Default for PersistedExternalProviderSettings {
-    fn default() -> Self {
-        Self {
-            base_url: String::new(),
-            model: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct PersistedAiSettings {
-    selected_provider: AiProviderKind,
-    openai_compatible: PersistedExternalProviderSettings,
-    openrouter: PersistedExternalProviderSettings,
-}
-
-impl Default for PersistedAiSettings {
-    fn default() -> Self {
-        Self {
-            selected_provider: AiProviderKind::Heuristic,
-            openai_compatible: PersistedExternalProviderSettings::default(),
-            openrouter: PersistedExternalProviderSettings {
-                base_url: "https://openrouter.ai/api/v1".into(),
-                model: String::new(),
-            },
-        }
-    }
-}
-
-impl PersistedAiSettings {
-    fn to_snapshot(&self, secret_store: &dyn SecretStore) -> AppResult<AppAiSettingsSnapshot> {
-        Ok(AppAiSettingsSnapshot {
-            selected_provider: self.selected_provider.clone(),
-            openai_compatible: ExternalProviderSettingsSnapshot {
-                base_url: self.openai_compatible.base_url.clone(),
-                model: self.openai_compatible.model.clone(),
-                has_api_key: secret_store
-                    .get_api_key(AiProviderKind::OpenAiCompatible)?
-                    .is_some(),
-            },
-            openrouter: ExternalProviderSettingsSnapshot {
-                base_url: self.openrouter.base_url.clone(),
-                model: self.openrouter.model.clone(),
-                has_api_key: secret_store.get_api_key(AiProviderKind::OpenRouter)?.is_some(),
-            },
-        })
-    }
-
-    fn apply_save(&mut self, input: &SaveAiSettingsInput, secret_store: &dyn SecretStore) -> AppResult<()> {
-        self.selected_provider = input.selected_provider.clone();
-        self.openai_compatible = normalize_external_settings(&input.openai_compatible);
-        self.openrouter = normalize_external_settings(&input.openrouter);
-
-        maybe_store_api_key(
-            secret_store,
-            AiProviderKind::OpenAiCompatible,
-            input.openai_compatible.api_key.as_deref(),
-        )?;
-        maybe_store_api_key(
-            secret_store,
-            AiProviderKind::OpenRouter,
-            input.openrouter.api_key.as_deref(),
-        )?;
-
-        Ok(())
-    }
-}
-
-fn normalize_external_settings(input: &ExternalProviderSettingsInput) -> PersistedExternalProviderSettings {
-    PersistedExternalProviderSettings {
-        base_url: normalize_base_url(&input.base_url),
-        model: input.model.trim().to_string(),
-    }
-}
-
-fn normalize_base_url(raw: &str) -> String {
-    raw.trim().trim_end_matches('/').to_string()
-}
-
-fn maybe_store_api_key(
-    secret_store: &dyn SecretStore,
-    provider: AiProviderKind,
-    api_key: Option<&str>,
-) -> AppResult<()> {
-    if let Some(api_key) = api_key.map(str::trim).filter(|value| !value.is_empty()) {
-        secret_store.set_api_key(provider, api_key)?;
-    }
-    Ok(())
-}
-
 pub struct ProjectStore {
-    base_dir: PathBuf,
     provider: Arc<dyn StoryAiProvider>,
     secret_store: Arc<dyn SecretStore>,
     chat_transport: Arc<dyn ChatCompletionsTransport>,
+    project_repository: ProjectRepository,
+    session_repository: SessionRepository,
+    ai_settings_repository: AiSettingsRepository,
     ai_settings: PersistedAiSettings,
     projects: HashMap<String, NovelProject>,
     sessions: HashMap<String, SessionState>,
 }
 
 impl ProjectStore {
-    pub fn new(base_dir: PathBuf) -> AppResult<Self> {
-        Self::with_services(
+    pub fn new(base_dir: std::path::PathBuf) -> AppResult<Self> {
+        let mut store = Self::with_services(
             base_dir,
             Arc::new(HeuristicStoryProvider),
             Arc::new(KeyringSecretStore::default()),
             Arc::new(ReqwestChatCompletionsTransport::default()),
-        )
+        )?;
+        store.load_from_disk()?;
+        Ok(store)
     }
 
     pub fn with_services(
-        base_dir: PathBuf,
+        base_dir: std::path::PathBuf,
         provider: Arc<dyn StoryAiProvider>,
         secret_store: Arc<dyn SecretStore>,
         chat_transport: Arc<dyn ChatCompletionsTransport>,
     ) -> AppResult<Self> {
-        fs::create_dir_all(base_dir.join("projects"))?;
-        fs::create_dir_all(base_dir.join("sessions"))?;
-
-        let settings_path = base_dir.join("ai-settings.json");
-        let ai_settings = if settings_path.exists() {
-            serde_json::from_str(&fs::read_to_string(&settings_path)?)?
-        } else {
-            PersistedAiSettings::default()
-        };
+        let layout = RuntimeDataPaths::new(base_dir);
+        let project_repository = ProjectRepository::new(layout.clone())?;
+        let session_repository = SessionRepository::new(layout.clone())?;
+        let ai_settings_repository = AiSettingsRepository::new(layout)?;
+        let ai_settings = ai_settings_repository.load_or_default()?;
 
         Ok(Self {
-            base_dir,
             provider,
             secret_store,
             chat_transport,
+            project_repository,
+            session_repository,
+            ai_settings_repository,
             ai_settings,
             projects: HashMap::new(),
             sessions: HashMap::new(),
@@ -174,14 +82,17 @@ impl ProjectStore {
     }
 
     #[cfg(test)]
-    pub fn reload(base_dir: PathBuf) -> AppResult<Self> {
+    pub fn reload(base_dir: std::path::PathBuf) -> AppResult<Self> {
         let mut store = Self::new(base_dir)?;
         store.load_from_disk()?;
         Ok(store)
     }
 
     #[cfg(test)]
-    pub fn with_secret_store(base_dir: PathBuf, secret_store: Arc<dyn SecretStore>) -> AppResult<Self> {
+    pub fn with_secret_store(
+        base_dir: std::path::PathBuf,
+        secret_store: Arc<dyn SecretStore>,
+    ) -> AppResult<Self> {
         Self::with_services(
             base_dir,
             Arc::new(HeuristicStoryProvider),
@@ -192,7 +103,7 @@ impl ProjectStore {
 
     #[cfg(test)]
     pub fn with_secret_store_and_transport(
-        base_dir: PathBuf,
+        base_dir: std::path::PathBuf,
         secret_store: Arc<dyn SecretStore>,
         chat_transport: Arc<dyn ChatCompletionsTransport>,
     ) -> AppResult<Self> {
@@ -205,7 +116,10 @@ impl ProjectStore {
     }
 
     #[cfg(test)]
-    pub fn reload_with_secret_store(base_dir: PathBuf, secret_store: Arc<dyn SecretStore>) -> AppResult<Self> {
+    pub fn reload_with_secret_store(
+        base_dir: std::path::PathBuf,
+        secret_store: Arc<dyn SecretStore>,
+    ) -> AppResult<Self> {
         let mut store = Self::with_secret_store(base_dir, secret_store)?;
         store.load_from_disk()?;
         Ok(store)
@@ -228,23 +142,100 @@ impl ProjectStore {
         Ok(project)
     }
 
+    pub fn list_projects(&self) -> AppResult<Vec<NovelProject>> {
+        let mut projects = self.projects.values().cloned().collect::<Vec<_>>();
+        projects.sort_by_key(|project| {
+            (
+                Reverse(project.story_package.is_some()),
+                project.name.clone(),
+                project.id.clone(),
+            )
+        });
+        Ok(projects)
+    }
+
+    pub fn list_saved_projects(&self) -> AppResult<Vec<SavedProjectLibraryEntry>> {
+        let mut entries = Vec::new();
+
+        for project in self.projects.values() {
+            if !is_saved_project_candidate(project) {
+                continue;
+            }
+
+            let latest_session = self.latest_project_session_activity(&project.id)?;
+            let project_activity_at = self
+                .project_repository
+                .last_modified_millis(&project.id)?
+                .unwrap_or_default();
+
+            let (session_id, current_scene_title, ending_type, last_activity_at, last_activity_kind) =
+                match latest_session {
+                    Some((session, session_activity_at)) => {
+                        let current_scene_title = project
+                            .story_package
+                            .as_ref()
+                            .and_then(|package| package.scenes.get(&session.current_scene_id))
+                            .map(|scene| scene.title.clone());
+                        let ending_type = session
+                            .ending_report
+                            .as_ref()
+                            .map(|report| report.ending_type.clone());
+                        let activity_kind = if ending_type.is_some() {
+                            SavedProjectActivityKind::Ending
+                        } else {
+                            SavedProjectActivityKind::Session
+                        };
+
+                        (
+                            Some(session.session_id),
+                            current_scene_title,
+                            ending_type,
+                            session_activity_at,
+                            activity_kind,
+                        )
+                    }
+                    None => (
+                        None,
+                        None,
+                        None,
+                        project_activity_at,
+                        SavedProjectActivityKind::Project,
+                    ),
+                };
+
+            entries.push(SavedProjectLibraryEntry {
+                project: project.clone(),
+                session_id,
+                current_scene_title,
+                ending_type,
+                last_activity_at,
+                last_activity_kind,
+            });
+        }
+
+        sort_saved_project_entries(&mut entries);
+        Ok(entries)
+    }
+
     pub fn import_novel_text(&mut self, project_id: &str, content: &str) -> AppResult<NovelProject> {
+        let sanitized = sanitize_text(content);
+        if sanitized.is_empty() {
+            return Err(AppError::Validation("Novel text cannot be empty".into()));
+        }
+        if !self.projects.contains_key(project_id) {
+            return Err(AppError::NotFound(project_id.to_string()));
+        }
+
+        self.invalidate_project_sessions(project_id)?;
+
         let Some(project) = self.projects.get_mut(project_id) else {
             return Err(AppError::NotFound(project_id.to_string()));
         };
 
-        project.raw_text = sanitize_text(content);
+        project.raw_text = sanitized;
         project.chapters = split_novel_into_chapters(&project.raw_text);
-        project.story_package = None;
-        project.character_cards.clear();
-        project.worldbook_entries.clear();
-        project.rules.clear();
-        project.build_status = BuildStatus {
-            stage: BuildStage::Imported,
-            message: "Novel imported".into(),
-            progress: 20,
-            error: None,
-        };
+        clear_build_derived_state(project);
+        project.build_status = build_status(BuildStage::Imported, "Novel imported", 20, None);
 
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
@@ -253,47 +244,56 @@ impl ProjectStore {
 
     pub fn build_story_package(&mut self, project_id: &str) -> AppResult<BuildStatus> {
         let settings = self.get_ai_settings()?;
-        let Some(project) = self.projects.get_mut(project_id) else {
+        let Some(mut project) = self.projects.get(project_id).cloned() else {
             return Err(AppError::NotFound(project_id.to_string()));
         };
 
-        project.build_status = BuildStatus {
-            stage: BuildStage::Analyzing,
-            message: "Analyzing source novel".into(),
-            progress: 45,
-            error: None,
-        };
+        if !has_usable_imported_source(&project) {
+            let error = AppError::InvalidState("project must contain imported source text before build".into());
+            self.persist_failed_build(project, "构建无法开始", 0, &error)?;
+            return Err(error);
+        }
+
+        project.build_status = build_status(BuildStage::Analyzing, "Analyzing source novel", 45, None);
+        self.store_project_snapshot(project.clone())?;
 
         let extracted = match settings.selected_provider {
             AiProviderKind::Heuristic => {
                 let analyzer = Analyzer::new(self.provider.clone());
-                analyzer.analyze(project)?
+                analyzer.analyze(&project)
             }
             AiProviderKind::OpenAiCompatible => OpenAiCompatibleProvider::new(self.chat_transport.clone())
-                .analyze(project, &settings, self.secret_store.as_ref())?,
+                .analyze(&project, &settings, self.secret_store.as_ref()),
             AiProviderKind::OpenRouter => OpenRouterProvider::new(self.chat_transport.clone())
-                .analyze(project, &settings, self.secret_store.as_ref())?,
+                .analyze(&project, &settings, self.secret_store.as_ref()),
         };
+        let extracted = match extracted {
+            Ok(extracted) => extracted,
+            Err(error) => {
+                self.persist_failed_build(project, "结构解析失败", 45, &error)?;
+                return Err(error);
+            }
+        };
+
         project.character_cards = extracted.character_cards;
         project.worldbook_entries = extracted.worldbook_entries;
         project.rules = extracted.rules;
-        project.build_status = BuildStatus {
-            stage: BuildStage::Compiling,
-            message: "Compiling scene graph".into(),
-            progress: 80,
-            error: None,
-        };
-        project.story_package = Some(compile_story_package(project, extracted.story_bible));
-        project.build_status = BuildStatus {
-            stage: BuildStage::Ready,
-            message: "Story package ready".into(),
-            progress: 100,
-            error: None,
+        project.build_status = build_status(BuildStage::Compiling, "Compiling scene graph", 80, None);
+        self.store_project_snapshot(project.clone())?;
+
+        let compiled = match validate_compiled_story_package(compile_story_package(&project, extracted.story_bible)) {
+            Ok(package) => package,
+            Err(error) => {
+                self.persist_failed_build(project, "互动编译失败", 80, &error)?;
+                return Err(error);
+            }
         };
 
-        let snapshot = project.clone();
-        self.persist_project(&snapshot)?;
-        Ok(snapshot.build_status)
+        project.story_package = Some(compiled);
+        project.build_status = build_status(BuildStage::Ready, "Story package ready", 100, None);
+        let status = project.build_status.clone();
+        self.store_project_snapshot(project)?;
+        Ok(status)
     }
 
     pub fn get_build_status(&self, project_id: &str) -> AppResult<BuildStatus> {
@@ -335,10 +335,33 @@ impl ProjectStore {
 
     pub fn start_session(&mut self, project_id: &str) -> AppResult<SessionState> {
         let package = self.load_story_package(project_id)?;
+        self.invalidate_project_sessions(project_id)?;
         let session = RuntimeEngine::start_session(project_id, &package)?;
         self.persist_session(&session)?;
         self.sessions.insert(session.session_id.clone(), session.clone());
         Ok(session)
+    }
+
+    pub fn find_project_session(&self, project_id: &str) -> AppResult<Option<SessionState>> {
+        if !self.projects.contains_key(project_id) {
+            return Err(AppError::NotFound(project_id.to_string()));
+        }
+
+        Ok(self
+            .sessions
+            .values()
+            .filter(|session| session.project_id == project_id)
+            .max_by_key(|session| {
+                (
+                    u8::from(session.ending_report.is_none()),
+                    session.visited_scenes.len(),
+                    session.major_choices.len(),
+                    session.free_input_history.len(),
+                    session.available_checkpoints.len(),
+                    session.session_id.clone(),
+                )
+            })
+            .cloned())
     }
 
     pub fn get_current_scene(&self, session_id: &str) -> AppResult<ScenePayload> {
@@ -348,6 +371,13 @@ impl ProjectStore {
             .ok_or_else(|| AppError::NotFound(session_id.to_string()))?;
         let package = self.load_story_package(&session.project_id)?;
         RuntimeEngine::get_current_scene(session, &package)
+    }
+
+    pub fn get_runtime_snapshot(&self, session_id: &str) -> AppResult<RuntimeSnapshot> {
+        Ok(RuntimeSnapshot {
+            payload: self.get_current_scene(session_id)?,
+            codex: self.get_story_codex(session_id)?,
+        })
     }
 
     pub fn submit_choice(&mut self, session_id: &str, choice_id: &str) -> AppResult<ScenePayload> {
@@ -545,6 +575,68 @@ impl ProjectStore {
         )
     }
 
+    pub fn preview_review_snapshot(
+        &self,
+        project_id: &str,
+        context: ReviewPreviewContext,
+    ) -> AppResult<ReviewPreviewSnapshot> {
+        let package = self.load_story_package(project_id)?;
+        let scene = package
+            .scenes
+            .get(&context.scene_id)
+            .ok_or_else(|| AppError::NotFound(context.scene_id.clone()))?;
+
+        let actor = resolve_preview_actor(&package, context.actor_character_id.as_deref());
+        let target = resolve_preview_target(&package, &actor, context.target_character_id.as_deref());
+        let lore_preview = RuntimeEngine::preview_active_worldbook(
+            &package,
+            &context.scene_id,
+            Some(&context.input_text),
+        )?;
+        let rule_preview = crate::runtime::evaluate_rules(
+            &crate::state::StoryState {
+                current_scene_id: scene.id.clone(),
+                ..crate::state::StoryState::default()
+            },
+            &package.world_model.rules,
+            RuleEvaluationInput {
+                event_kind: context.event_kind.clone(),
+                actor_character_id: actor.id.clone(),
+                actor_gender: actor.gender.clone(),
+                target_character_id: target.id.clone(),
+                target_gender: target.gender.clone(),
+                source_text: context.input_text.clone(),
+                scene_title: scene.title.clone(),
+            },
+        )?;
+        let projected_outcome = build_projected_outcome(scene, &package, &rule_preview);
+        let explanations =
+            build_preview_explanations(&lore_preview, &rule_preview, &projected_outcome);
+
+        Ok(ReviewPreviewSnapshot {
+            context,
+            lore_preview,
+            rule_preview,
+            projected_outcome,
+            explanations,
+        })
+    }
+
+    pub fn save_review_preview_context(
+        &mut self,
+        project_id: &str,
+        context: ReviewPreviewContext,
+    ) -> AppResult<ReviewPreviewContext> {
+        let project = self
+            .projects
+            .get_mut(project_id)
+            .ok_or_else(|| AppError::NotFound(project_id.to_string()))?;
+        project.review_preview_context = Some(context.clone());
+        let snapshot = project.clone();
+        self.persist_project(&snapshot)?;
+        Ok(context)
+    }
+
     pub fn rewind_to_checkpoint(&mut self, session_id: &str, checkpoint_id: &str) -> AppResult<ScenePayload> {
         let project_id = self
             .sessions
@@ -569,40 +661,84 @@ impl ProjectStore {
         Ok(session.ending_report.clone())
     }
 
-    fn project_path(&self, id: &str) -> PathBuf {
-        self.base_dir.join("projects").join(format!("{id}.json"))
-    }
-
-    fn session_path(&self, id: &str) -> PathBuf {
-        self.base_dir.join("sessions").join(format!("{id}.json"))
-    }
-
     fn persist_project(&self, project: &NovelProject) -> AppResult<()> {
-        let content = serde_json::to_string_pretty(project)?;
-        fs::write(self.project_path(&project.id), content)?;
-        Ok(())
+        self.project_repository.save(project)
     }
 
     fn persist_session(&self, session: &SessionState) -> AppResult<()> {
-        let content = serde_json::to_string_pretty(session)?;
-        fs::write(self.session_path(&session.session_id), content)?;
-        Ok(())
-    }
-
-    fn ai_settings_path(&self) -> PathBuf {
-        self.base_dir.join("ai-settings.json")
+        self.session_repository.save(session)
     }
 
     fn persist_ai_settings(&self) -> AppResult<()> {
-        let content = serde_json::to_string_pretty(&self.ai_settings)?;
-        fs::write(self.ai_settings_path(), content)?;
+        self.ai_settings_repository.save(&self.ai_settings)
+    }
+
+    fn store_project_snapshot(&mut self, project: NovelProject) -> AppResult<()> {
+        self.persist_project(&project)?;
+        self.projects.insert(project.id.clone(), project);
         Ok(())
     }
 
-    #[cfg(test)]
+    fn persist_failed_build(
+        &mut self,
+        mut project: NovelProject,
+        message: &str,
+        progress: u8,
+        error: &AppError,
+    ) -> AppResult<()> {
+        project.build_status = build_status(
+            BuildStage::Failed,
+            message,
+            progress,
+            Some(command_error_message(error)),
+        );
+        self.store_project_snapshot(project)
+    }
+
+    fn latest_project_session_activity(&self, project_id: &str) -> AppResult<Option<(SessionState, i64)>> {
+        let mut latest: Option<(SessionState, i64)> = None;
+
+        for session in self.sessions.values().filter(|session| session.project_id == project_id) {
+            let activity_at = self
+                .session_repository
+                .last_modified_millis(&session.session_id)?
+                .unwrap_or_default();
+
+            let should_replace = latest
+                .as_ref()
+                .map(|(current, current_activity_at)| {
+                    activity_at > *current_activity_at
+                        || (activity_at == *current_activity_at && session.session_id < current.session_id)
+                })
+                .unwrap_or(true);
+
+            if should_replace {
+                latest = Some((session.clone(), activity_at));
+            }
+        }
+
+        Ok(latest)
+    }
+
+    fn invalidate_project_sessions(&mut self, project_id: &str) -> AppResult<()> {
+        let session_ids = self
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.project_id == project_id)
+            .map(|(session_id, _)| session_id.clone())
+            .collect::<Vec<_>>();
+
+        for session_id in session_ids {
+            self.sessions.remove(&session_id);
+            self.session_repository.delete(&session_id)?;
+        }
+
+        Ok(())
+    }
+
     fn load_from_disk(&mut self) -> AppResult<()> {
-        self.projects = load_objects::<NovelProject>(&self.base_dir.join("projects"))?;
-        self.sessions = load_objects::<SessionState>(&self.base_dir.join("sessions"))?;
+        self.projects = self.project_repository.load_all()?;
+        self.sessions = self.session_repository.load_all()?;
         Ok(())
     }
 }
@@ -610,6 +746,219 @@ impl ProjectStore {
 fn rebuild_story_package_from_project(project: &mut NovelProject) {
     let story_bible = story_bible_snapshot(project);
     project.story_package = Some(compile_story_package(project, story_bible));
+}
+
+fn clear_build_derived_state(project: &mut NovelProject) {
+    project.story_package = None;
+    project.character_cards.clear();
+    project.worldbook_entries.clear();
+    project.rules.clear();
+}
+
+fn has_usable_imported_source(project: &NovelProject) -> bool {
+    !project.raw_text.trim().is_empty() && !project.chapters.is_empty()
+}
+
+fn is_saved_project_candidate(project: &NovelProject) -> bool {
+    project.build_status.stage == BuildStage::Ready && project.story_package.is_some()
+}
+
+fn sort_saved_project_entries(entries: &mut [SavedProjectLibraryEntry]) {
+    entries.sort_by(|left, right| {
+        right
+            .last_activity_at
+            .cmp(&left.last_activity_at)
+            .then_with(|| left.project.name.cmp(&right.project.name))
+            .then_with(|| left.project.id.cmp(&right.project.id))
+    });
+}
+
+fn build_status(
+    stage: BuildStage,
+    message: impl Into<String>,
+    progress: u8,
+    error: Option<String>,
+) -> BuildStatus {
+    BuildStatus {
+        stage,
+        message: message.into(),
+        progress,
+        error,
+    }
+}
+
+fn command_error_message(error: &AppError) -> String {
+    match error {
+        AppError::Io(message) => message.to_string(),
+        AppError::Serde(message) => message.to_string(),
+        AppError::NotFound(message)
+        | AppError::InvalidState(message)
+        | AppError::RuleViolation(message)
+        | AppError::Validation(message)
+        | AppError::Provider(message)
+        | AppError::SecretStore(message) => message.clone(),
+    }
+}
+
+fn validate_compiled_story_package(package: StoryPackage) -> AppResult<StoryPackage> {
+    if package.start_scene_id.trim().is_empty() {
+        return Err(AppError::InvalidState(
+            "compiled story package is missing a start scene".into(),
+        ));
+    }
+    if package.scenes.is_empty() {
+        return Err(AppError::InvalidState(
+            "compiled story package is missing scenes".into(),
+        ));
+    }
+    if !package.scenes.contains_key(&package.start_scene_id) {
+        return Err(AppError::InvalidState(
+            "compiled story package start scene does not exist".into(),
+        ));
+    }
+    if package.scenes.values().all(|scene| scene.ending.is_none()) {
+        return Err(AppError::InvalidState(
+            "compiled story package must contain at least one ending".into(),
+        ));
+    }
+
+    Ok(package)
+}
+
+fn resolve_preview_actor(package: &StoryPackage, explicit_id: Option<&str>) -> CharacterCard {
+    explicit_id
+        .and_then(|candidate| {
+            package
+                .world_model
+                .character_cards
+                .iter()
+                .find(|card| card.id == candidate)
+        })
+        .cloned()
+        .or_else(|| package.world_model.character_cards.first().cloned())
+        .unwrap_or_default()
+}
+
+fn resolve_preview_target(
+    package: &StoryPackage,
+    actor: &CharacterCard,
+    explicit_id: Option<&str>,
+) -> CharacterCard {
+    explicit_id
+        .and_then(|candidate| {
+            package
+                .world_model
+                .character_cards
+                .iter()
+                .find(|card| card.id == candidate)
+        })
+        .cloned()
+        .or_else(|| {
+            package
+                .world_model
+                .character_cards
+                .iter()
+                .find(|card| card.id != actor.id)
+                .cloned()
+        })
+        .unwrap_or_else(|| actor.clone())
+}
+
+fn build_projected_outcome(
+    scene: &SceneNode,
+    package: &StoryPackage,
+    rule_preview: &RuleEvaluationResult,
+) -> ProjectedOutcomePreview {
+    if rule_preview.blocked {
+        return ProjectedOutcomePreview {
+            blocked: true,
+            stays_on_scene: true,
+            next_scene_id: None,
+            next_scene_title: None,
+            next_scene_summary: None,
+            candidate_choices: Vec::new(),
+        };
+    }
+
+    let next_scene_id = scene
+        .candidate_choices
+        .iter()
+        .find(|choice| !choice.next_scene_id.trim().is_empty())
+        .map(|choice| choice.next_scene_id.clone())
+        .or_else(|| scene.fallback_next.clone());
+
+    let Some(next_scene_id) = next_scene_id else {
+        return ProjectedOutcomePreview {
+            blocked: false,
+            stays_on_scene: true,
+            next_scene_id: None,
+            next_scene_title: None,
+            next_scene_summary: None,
+            candidate_choices: Vec::new(),
+        };
+    };
+
+    let next_scene = package.scenes.get(&next_scene_id);
+    ProjectedOutcomePreview {
+        blocked: false,
+        stays_on_scene: false,
+        next_scene_id: Some(next_scene_id.clone()),
+        next_scene_title: next_scene.map(|scene| scene.title.clone()),
+        next_scene_summary: next_scene.map(|scene| scene.summary.clone()),
+        candidate_choices: next_scene
+            .map(|scene| {
+                scene
+                    .candidate_choices
+                    .iter()
+                    .map(|choice| ProjectedSceneChoicePreview {
+                        id: choice.id.clone(),
+                        label: choice.label.clone(),
+                        intent_tag: choice.intent_tag.clone(),
+                        next_scene_id: choice.next_scene_id.clone(),
+                        unlock_conditions: choice.unlock_conditions.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
+}
+
+fn build_preview_explanations(
+    lore_preview: &[ActiveLoreEntry],
+    rule_preview: &RuleEvaluationResult,
+    projected_outcome: &ProjectedOutcomePreview,
+) -> ReviewPreviewExplanations {
+    let lore_summary = if lore_preview.is_empty() {
+        "没有新增 lore 命中".to_string()
+    } else {
+        format!("命中 {} 条 lore", lore_preview.len())
+    };
+
+    let rule_summary = if rule_preview.blocked {
+        format!("存在 {} 条激活规则，当前动作会被阻止", rule_preview.active_rules.len())
+    } else if rule_preview.active_rules.is_empty() {
+        "没有规则阻止当前动作".to_string()
+    } else {
+        format!("命中 {} 条激活规则，但当前动作允许继续", rule_preview.active_rules.len())
+    };
+
+    let outcome_summary = if projected_outcome.blocked {
+        "动作会停留在当前场景".to_string()
+    } else if projected_outcome.stays_on_scene {
+        "当前上下文下不会推进到新场景".to_string()
+    } else if let Some(title) = projected_outcome.next_scene_title.as_deref() {
+        format!("动作会推进到《{title}》")
+    } else if let Some(scene_id) = projected_outcome.next_scene_id.as_deref() {
+        format!("动作会推进到 {scene_id}")
+    } else {
+        "当前上下文下不会推进到新场景".to_string()
+    };
+
+    ReviewPreviewExplanations {
+        lore_summary,
+        rule_summary,
+        outcome_summary,
+    }
 }
 
 fn story_bible_snapshot(project: &NovelProject) -> StoryBible {
@@ -669,36 +1018,16 @@ fn story_bible_snapshot(project: &NovelProject) -> StoryBible {
 }
 
 #[cfg(test)]
-fn load_objects<T>(dir: &Path) -> AppResult<HashMap<String, T>>
-where
-    T: serde::de::DeserializeOwned + Clone,
-{
-    let mut objects = HashMap::new();
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let raw = fs::read_to_string(entry.path())?;
-        let object: T = serde_json::from_str(&raw)?;
-        objects.insert(
-            entry
-                .file_name()
-                .to_string_lossy()
-                .trim_end_matches(".json")
-                .to_string(),
-            object,
-        );
-    }
-    Ok(objects)
-}
-
-#[cfg(test)]
 mod tests {
-    use std::{fs, sync::Arc};
+    use std::{fs, sync::Arc, thread::sleep, time::Duration};
 
     use super::ProjectStore;
     use crate::{
+        error::AppError,
         importer::split_novel_into_chapters,
         models::{
-            AiProviderKind, BuildStage, ExternalProviderSettingsInput, SaveAiSettingsInput,
+            AiProviderKind, BuildStage, ExternalProviderSettingsInput, ReviewPreviewContext,
+            SaveAiSettingsInput, SavedProjectActivityKind, SavedProjectLibraryEntry,
         },
         provider::{FakeChatCompletionsTransport, InMemorySecretStore},
     };
@@ -861,6 +1190,33 @@ mod tests {
         .join("\n")
     }
 
+    fn build_ready_project(store: &mut ProjectStore, name: &str) -> String {
+        let project = store.create_project(name).expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+        project.id
+    }
+
+    fn advance_session_to_ending(store: &mut ProjectStore, session_id: &str) {
+        for _ in 0..3 {
+            let payload = store.get_current_scene(session_id).expect("current scene");
+            if payload.scene.ending.is_some() {
+                return;
+            }
+
+            let choice = payload
+                .scene
+                .candidate_choices
+                .first()
+                .expect("scene should expose a choice");
+            store
+                .submit_choice(session_id, &choice.id)
+                .expect("advance toward ending");
+        }
+    }
+
     #[test]
     fn split_into_chapters_preserves_titles_and_ignores_blank_lines() {
         let chapters = split_novel_into_chapters(&sample_novel());
@@ -869,6 +1225,29 @@ mod tests {
         assert_eq!(chapters[0].title, "第1章 雨夜来客");
         assert!(chapters[1].content.contains("旧约"));
         assert!(chapters[2].excerpt.contains("沈砚必须决定"));
+    }
+
+    #[test]
+    fn import_novel_text_rejects_whitespace_only_input_without_mutating_existing_project() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        let imported = store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+
+        let error = store
+            .import_novel_text(&project.id, "  \n\t  ")
+            .expect_err("whitespace import should fail");
+
+        assert!(matches!(error, AppError::Validation(_)));
+
+        let reloaded = store.get_project(&project.id).expect("project");
+        assert_eq!(reloaded.raw_text, imported.raw_text);
+        assert_eq!(reloaded.chapters.len(), imported.chapters.len());
+        assert_eq!(reloaded.build_status.stage, BuildStage::Imported);
+        assert_eq!(reloaded.build_status.error, None);
     }
 
     #[test]
@@ -959,6 +1338,33 @@ mod tests {
     }
 
     #[test]
+    fn runtime_snapshot_returns_payload_and_codex_from_the_same_session_state() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+
+        let session = store.start_session(&project.id).expect("session");
+        let current = store.get_current_scene(&session.session_id).expect("current");
+        let advanced = store
+            .submit_choice(&session.session_id, &current.scene.candidate_choices[0].id)
+            .expect("advance");
+
+        let snapshot = store
+            .get_runtime_snapshot(&session.session_id)
+            .expect("runtime snapshot");
+
+        assert_eq!(snapshot.payload.session.session_id, session.session_id);
+        assert_eq!(snapshot.payload.story_state.current_scene_id, snapshot.payload.session.current_scene_id);
+        assert_eq!(snapshot.payload.session.major_choices, snapshot.codex.recent_choices);
+        assert_eq!(snapshot.payload.scene.id, advanced.scene.id);
+    }
+
+    #[test]
     fn current_scene_exposes_active_lore_rules_and_story_state() {
         let dir = tempfile::tempdir().expect("temp dir");
         let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
@@ -1029,6 +1435,76 @@ mod tests {
     }
 
     #[test]
+    fn preview_review_snapshot_uses_explicit_context_and_returns_projected_outcome() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+
+        let scene_id = store
+            .load_story_package(&project.id)
+            .expect("package")
+            .start_scene_id;
+
+        let snapshot = store
+            .preview_review_snapshot(
+                &project.id,
+                ReviewPreviewContext {
+                    scene_id: scene_id.clone(),
+                    event_kind: "open_gate".into(),
+                    input_text: "午夜去开门".into(),
+                    actor_character_id: Some("character-1".into()),
+                    target_character_id: Some("character-2".into()),
+                },
+            )
+            .expect("snapshot");
+
+        assert_eq!(snapshot.context.scene_id, scene_id);
+        assert_eq!(snapshot.context.event_kind, "open_gate");
+        assert!(!snapshot.explanations.rule_summary.is_empty());
+        assert_eq!(snapshot.projected_outcome.blocked, snapshot.rule_preview.blocked);
+    }
+
+    #[test]
+    fn save_review_preview_context_persists_on_project_and_survives_reload() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project_id = {
+            let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+            let project = store.create_project("临川夜话").expect("project");
+
+            let saved = store
+                .save_review_preview_context(
+                    &project.id,
+                    ReviewPreviewContext {
+                        scene_id: "scene-1".into(),
+                        event_kind: "open_gate".into(),
+                        input_text: "午夜去开门".into(),
+                        actor_character_id: Some("character-1".into()),
+                        target_character_id: Some("character-2".into()),
+                    },
+                )
+                .expect("saved");
+
+            assert_eq!(saved.event_kind, "open_gate");
+            project.id
+        };
+
+        let reloaded = ProjectStore::reload(dir.path().to_path_buf()).expect("reload");
+        let project = reloaded.get_project(&project_id).expect("project after reload");
+        assert_eq!(
+            project
+                .review_preview_context
+                .expect("persisted context")
+                .input_text,
+            "午夜去开门"
+        );
+    }
+
+    #[test]
     fn free_input_that_implies_relation_updates_story_possibility_flags() {
         let dir = tempfile::tempdir().expect("temp dir");
         let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
@@ -1082,6 +1558,53 @@ mod tests {
         let payload = store.get_current_scene(&session_id).expect("scene after reload");
         assert!(!payload.scene.title.is_empty());
         assert!(!payload.story_state.current_scene_id.is_empty());
+    }
+
+    #[test]
+    fn reimport_clears_derived_artifacts_and_invalidates_sessions() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let session_id = {
+            let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+            let project = store.create_project("临川夜话").expect("project");
+            store
+                .import_novel_text(&project.id, &sample_novel())
+                .expect("import");
+            store.build_story_package(&project.id).expect("build");
+
+            let session = store.start_session(&project.id).expect("session");
+            let rewritten = [
+                "第1章 新夜",
+                "",
+                "新的章节把原来的故事替换掉了。",
+                "门前只剩下另一种选择。",
+            ]
+            .join("\n");
+            let imported = store
+                .import_novel_text(&project.id, &rewritten)
+                .expect("re-import");
+
+            assert!(imported.story_package.is_none());
+            assert!(imported.character_cards.is_empty());
+            assert!(imported.worldbook_entries.is_empty());
+            assert!(imported.rules.is_empty());
+            assert_eq!(imported.build_status.stage, BuildStage::Imported);
+            assert_eq!(imported.build_status.error, None);
+
+            let error = store
+                .get_current_scene(&session.session_id)
+                .expect_err("session should be invalidated");
+            assert!(matches!(error, AppError::NotFound(_)));
+
+            session.session_id
+        };
+
+        assert!(!dir.path().join("sessions").join(format!("{session_id}.json")).exists());
+
+        let store = ProjectStore::reload(dir.path().to_path_buf()).expect("reload");
+        let error = store
+            .get_current_scene(&session_id)
+            .expect_err("session should stay removed after reload");
+        assert!(matches!(error, AppError::NotFound(_)));
     }
 
     #[test]
@@ -1238,5 +1761,250 @@ mod tests {
             .build_story_package(&project.id)
             .expect_err("missing key should fail");
         assert!(error.to_string().contains("API key"));
+    }
+
+    #[test]
+    fn build_story_package_requires_imported_source() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        let error = store
+            .build_story_package(&project.id)
+            .expect_err("build without import should fail");
+
+        assert!(matches!(error, AppError::InvalidState(_)));
+    }
+
+    #[test]
+    fn failed_build_persists_failed_status_and_survives_reload() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let secrets = Arc::new(InMemorySecretStore::default());
+        let transport = Arc::new(FakeChatCompletionsTransport::from_responses(vec![
+            Ok("not-json".into()),
+            Ok("still-not-json".into()),
+        ]));
+        let mut store = ProjectStore::with_secret_store_and_transport(
+            dir.path().to_path_buf(),
+            secrets,
+            transport,
+        )
+        .expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.save_ai_settings(openrouter_settings()).expect("settings");
+
+        let error = store
+            .build_story_package(&project.id)
+            .expect_err("build should fail");
+        assert!(matches!(error, AppError::Provider(_)));
+
+        let failed = store.get_build_status(&project.id).expect("status");
+        assert_eq!(failed.stage, BuildStage::Failed);
+        assert_eq!(failed.progress, 45);
+        assert!(failed.error.as_deref().is_some_and(|message| !message.is_empty()));
+
+        let reloaded = ProjectStore::reload_with_secret_store(
+            dir.path().to_path_buf(),
+            Arc::new(InMemorySecretStore::default()),
+        )
+        .expect("reload");
+        let failed_after_reload = reloaded.get_build_status(&project.id).expect("status after reload");
+        assert_eq!(failed_after_reload.stage, BuildStage::Failed);
+        assert_eq!(failed_after_reload.progress, 45);
+        assert_eq!(failed_after_reload.error, failed.error);
+    }
+
+    #[test]
+    fn start_session_resets_the_existing_project_session_state() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+
+        let first = store.start_session(&project.id).expect("first session");
+        let first_scene = store
+            .get_current_scene(&first.session_id)
+            .expect("first scene before advancing");
+        let advanced = store
+            .submit_choice(&first.session_id, &first_scene.scene.candidate_choices[0].id)
+            .expect("advance existing session");
+
+        let restarted = store.start_session(&project.id).expect("restarted session");
+        let current = store
+            .get_current_scene(&restarted.session_id)
+            .expect("current scene after restart");
+
+        assert_eq!(first.session_id, restarted.session_id);
+        assert_ne!(advanced.scene.id, current.scene.id);
+        assert_eq!(current.scene.id, first_scene.scene.id);
+        assert_eq!(current.session.free_input_history, Vec::<String>::new());
+    }
+
+    #[test]
+    fn new_store_loads_projects_and_sessions_from_disk_automatically() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let (project_id, session_id) = {
+            let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+            let project = store.create_project("临川夜话").expect("project");
+            store
+                .import_novel_text(&project.id, &sample_novel())
+                .expect("import");
+            store.build_story_package(&project.id).expect("build");
+            let session = store.start_session(&project.id).expect("session");
+            (project.id, session.session_id)
+        };
+
+        let store = ProjectStore::new(dir.path().to_path_buf()).expect("reloaded store");
+        let resumed = store
+            .find_project_session(&project_id)
+            .expect("session lookup")
+            .expect("persisted session");
+        let payload = store
+            .get_current_scene(&session_id)
+            .expect("scene after startup reload");
+
+        assert_eq!(resumed.session_id, session_id);
+        assert_eq!(payload.session.session_id, session_id);
+    }
+
+    #[test]
+    fn list_projects_returns_ready_projects_first() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let imported_only = store.create_project("乙案").expect("imported-only project");
+        store
+            .import_novel_text(&imported_only.id, &sample_novel())
+            .expect("import imported-only project");
+
+        let ready = store.create_project("甲案").expect("ready project");
+        store
+            .import_novel_text(&ready.id, &sample_novel())
+            .expect("import ready project");
+        store.build_story_package(&ready.id).expect("build ready project");
+
+        let projects = store.list_projects().expect("list projects");
+
+        assert_eq!(projects[0].id, ready.id);
+        assert!(projects.iter().any(|project| project.id == imported_only.id));
+    }
+
+    #[test]
+    fn list_saved_projects_returns_recent_activity_summary_entries() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project_only_id = build_ready_project(&mut store, "霜桥夜行");
+        sleep(Duration::from_millis(20));
+
+        let active_session_project_id = build_ready_project(&mut store, "临川夜话");
+        sleep(Duration::from_millis(20));
+        let active_session = store
+            .start_session(&active_session_project_id)
+            .expect("active session");
+        let active_scene_title = store
+            .get_current_scene(&active_session.session_id)
+            .expect("active scene")
+            .scene
+            .title;
+        sleep(Duration::from_millis(20));
+
+        let ending_project_id = build_ready_project(&mut store, "归潮纪");
+        sleep(Duration::from_millis(20));
+        let ending_session = store.start_session(&ending_project_id).expect("ending session");
+        advance_session_to_ending(&mut store, &ending_session.session_id);
+
+        let summaries = store.list_saved_projects().expect("saved project summaries");
+        let ordered_ids = summaries
+            .iter()
+            .map(|entry| entry.project.id.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ordered_ids,
+            vec![
+                ending_project_id.clone(),
+                active_session_project_id.clone(),
+                project_only_id.clone(),
+            ]
+        );
+
+        let project_only = summaries
+            .iter()
+            .find(|entry| entry.project.id == project_only_id)
+            .expect("project-only entry");
+        assert_eq!(project_only.last_activity_kind, SavedProjectActivityKind::Project);
+        assert_eq!(project_only.session_id, None);
+        assert_eq!(project_only.last_activity_at, store
+            .project_repository
+            .last_modified_millis(&project_only_id)
+            .expect("project mtime")
+            .expect("project file should exist"));
+
+        let active = summaries
+            .iter()
+            .find(|entry| entry.project.id == active_session_project_id)
+            .expect("active-session entry");
+        assert_eq!(active.last_activity_kind, SavedProjectActivityKind::Session);
+        assert_eq!(active.session_id.as_deref(), Some(active_session.session_id.as_str()));
+        assert_eq!(active.current_scene_title.as_deref(), Some(active_scene_title.as_str()));
+        assert_eq!(active.last_activity_at, store
+            .session_repository
+            .last_modified_millis(&active_session.session_id)
+            .expect("session mtime")
+            .expect("session file should exist"));
+
+        let ending = summaries
+            .iter()
+            .find(|entry| entry.project.id == ending_project_id)
+            .expect("ending entry");
+        assert_eq!(ending.last_activity_kind, SavedProjectActivityKind::Ending);
+        assert_eq!(ending.session_id.as_deref(), Some(ending_session.session_id.as_str()));
+        assert!(ending.ending_type.is_some());
+        assert_eq!(ending.last_activity_at, store
+            .session_repository
+            .last_modified_millis(&ending_session.session_id)
+            .expect("ending session mtime")
+            .expect("ending session file should exist"));
+    }
+
+    #[test]
+    fn sort_saved_project_entries_breaks_activity_ties_by_name_then_id() {
+        let entry = |id: &str, name: &str| SavedProjectLibraryEntry {
+            project: crate::models::NovelProject {
+                id: id.into(),
+                name: name.into(),
+                ..crate::models::NovelProject::default()
+            },
+            session_id: None,
+            current_scene_title: None,
+            ending_type: None,
+            last_activity_at: 42,
+            last_activity_kind: SavedProjectActivityKind::Project,
+        };
+
+        let mut entries = vec![entry("project-b", "北门"), entry("project-a", "北门"), entry("project-c", "临川")];
+        super::sort_saved_project_entries(&mut entries);
+
+        let ordered = entries
+            .into_iter()
+            .map(|entry| (entry.project.name, entry.project.id))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ordered,
+            vec![
+                ("临川".into(), "project-c".into()),
+                ("北门".into(), "project-a".into()),
+                ("北门".into(), "project-b".into()),
+            ]
+        );
     }
 }

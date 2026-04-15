@@ -342,10 +342,54 @@ export interface ScenePayload {
   story_state: StoryState;
 }
 
+export interface RuntimeSnapshot {
+  payload: ScenePayload;
+  codex: StoryCodex;
+}
+
 export interface RuleEvaluationResult {
   story_state: StoryState;
   active_rules: ActiveRuleHit[];
   blocked: boolean;
+}
+
+export interface ReviewPreviewContext {
+  sceneId: string;
+  eventKind: string;
+  inputText: string;
+  actorCharacterId?: string | null;
+  targetCharacterId?: string | null;
+}
+
+export interface ProjectedSceneChoicePreview {
+  id: string;
+  label: string;
+  intentTag: string;
+  nextSceneId: string;
+  unlockConditions: string[];
+}
+
+export interface ProjectedOutcomePreview {
+  blocked: boolean;
+  staysOnScene: boolean;
+  nextSceneId?: string | null;
+  nextSceneTitle?: string | null;
+  nextSceneSummary?: string | null;
+  candidateChoices: ProjectedSceneChoicePreview[];
+}
+
+export interface ReviewPreviewExplanations {
+  loreSummary: string;
+  ruleSummary: string;
+  outcomeSummary: string;
+}
+
+export interface ReviewPreviewSnapshot {
+  context: ReviewPreviewContext;
+  lorePreview: ActiveLoreEntry[];
+  rulePreview: RuleEvaluationResult;
+  projectedOutcome: ProjectedOutcomePreview;
+  explanations: ReviewPreviewExplanations;
 }
 
 export interface NovelProject {
@@ -358,6 +402,18 @@ export interface NovelProject {
   character_cards: CharacterCard[];
   worldbook_entries: WorldBookEntry[];
   rules: RuleDefinition[];
+  review_preview_context?: ReviewPreviewContext | null;
+}
+
+export type SavedProjectActivityKind = 'project' | 'session' | 'ending';
+
+export interface SavedProjectLibraryEntry {
+  project: NovelProject;
+  session_id?: string | null;
+  current_scene_title?: string | null;
+  ending_type?: string | null;
+  last_activity_at: number;
+  last_activity_kind: SavedProjectActivityKind;
 }
 
 export interface StageCard {

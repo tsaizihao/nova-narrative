@@ -1,11 +1,17 @@
 <script lang="ts">
   import { afterUpdate, createEventDispatcher, onMount } from 'svelte';
-  import type { AiProviderKind, AppAiSettingsSnapshot, SaveAiSettingsInput } from '$lib/types';
+  import type {
+    AiProviderKind,
+    AppAiSettingsSnapshot,
+    SaveAiSettingsInput
+  } from '$lib/types';
+  import type { SavedProjectCardEntry } from '$lib/modules/projects/library';
 
   export let projectName = '';
   export let novelText = '';
   export let busy = false;
   export let error = '';
+  export let resumableProjects: SavedProjectCardEntry[] = [];
   export let aiSettings: AppAiSettingsSnapshot = {
     selected_provider: 'heuristic',
     openai_compatible: {
@@ -54,6 +60,7 @@
     updateAiApiKey: string;
     saveAiSettings: void;
     clearProviderApiKey: AiProviderKind;
+    openProject: string;
   }>();
 
   const providerLabels: Record<AiProviderKind, string> = {
@@ -144,6 +151,41 @@
         </div>
       </div>
     </section>
+
+    {#if resumableProjects.length > 0}
+      <section class="resume-panel">
+        <div>
+          <p class="label">继续已有项目</p>
+          <h3>从上次构建好的故事继续</h3>
+        </div>
+
+        <div class="resume-list">
+          {#each resumableProjects as resumableProject (resumableProject.project.id)}
+            <article class="resume-item">
+              <div>
+                <strong>{resumableProject.project.name}</strong>
+                <p>{resumableProject.activityLabel}</p>
+                <p class="activity-time">
+                  <span class="activity-meta">
+                    {resumableProject.activityMetaLabel ??
+                      (resumableProject.sessionId ? '最近游玩' : '最近导入')}
+                  </span>
+                  <span>{resumableProject.activityTimeLabel}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                class="ghost"
+                on:click={() => dispatch('openProject', resumableProject.project.id)}
+                disabled={busy}
+              >
+                {resumableProject.ctaLabel}
+              </button>
+            </article>
+          {/each}
+        </div>
+      </section>
+    {/if}
   </div>
 
   <div class="composer">
@@ -298,7 +340,8 @@
 
   .copy,
   .composer,
-  .support-panel {
+  .support-panel,
+  .resume-panel {
     border-radius: 28px;
     border: 1px solid rgba(121, 103, 81, 0.14);
     background: rgba(248, 243, 234, 0.94);
@@ -319,6 +362,12 @@
     display: grid;
     gap: 18px;
     padding: 28px;
+  }
+
+  .resume-panel {
+    display: grid;
+    gap: 16px;
+    padding: 24px 28px 28px;
   }
 
   .eyebrow,
@@ -412,6 +461,43 @@
     padding: 14px 14px 16px;
     border-radius: 18px;
     background: rgba(121, 103, 81, 0.06);
+  }
+
+  .resume-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .resume-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(121, 103, 81, 0.08);
+  }
+
+  .resume-item strong,
+  .resume-item p {
+    display: block;
+  }
+
+  .resume-item p {
+    margin: 6px 0 0;
+    color: rgba(63, 47, 35, 0.68);
+    font-size: 0.92rem;
+  }
+
+  .activity-time {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .activity-meta {
+    color: #91765d;
   }
 
   .outcome-grid span,

@@ -1,33 +1,53 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
+  import type { Unsubscriber } from 'svelte/store';
 
   import PhaseStepper from '$lib/components/PhaseStepper.svelte';
   import ReviewWorkspace from '$lib/components/ReviewWorkspace.svelte';
-  import type {
-    ActiveLoreEntry,
-    CharacterCard,
-    NovelProject,
-    RuleDefinition,
-    RuleEvaluationResult,
-    WorldBookEntry
-  } from '$lib/types';
+  import {
+    createReviewWorkspaceController,
+    type ReviewWorkspaceController,
+    type ReviewWorkspaceState
+  } from '$lib/modules/review/workspace';
+  import type { NovelProject } from '$lib/types';
 
   export let project: NovelProject;
-  export let lorePreview: ActiveLoreEntry[] = [];
-  export let rulePreview: RuleEvaluationResult | null = null;
-  export let error = '';
   export let busy = false;
+  export let enterStoryError = '';
+  export let hasActiveSession = false;
 
   const dispatch = createEventDispatcher<{
     enterStory: void;
-    saveCharacter: CharacterCard;
-    saveWorldBook: WorldBookEntry;
-    deleteWorldBook: string;
-    saveRule: RuleDefinition;
-    deleteRule: string;
   }>();
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
+
+  let workspace: ReviewWorkspaceController | null = null;
+  let workspaceState: ReviewWorkspaceState | null = null;
+  let unsubscribe: Unsubscriber | null = null;
+  let workspaceProjectId = '';
+
+  function attachWorkspace(nextProject: NovelProject) {
+    unsubscribe?.();
+    workspace = createReviewWorkspaceController(nextProject);
+    unsubscribe = workspace.subscribe((value) => {
+      workspaceState = value;
+    });
+    workspaceProjectId = nextProject.id;
+  }
+
+  function withWorkspace(action: (controller: ReviewWorkspaceController) => void | Promise<void>) {
+    if (!workspace) return;
+    void action(workspace);
+  }
+
+  $: if (project && project.id !== workspaceProjectId) {
+    attachWorkspace(project);
+  }
+
+  onDestroy(() => {
+    unsubscribe?.();
+  });
 </script>
 
 <div class="review-stage-shell" data-testid="review-stage-shell">
@@ -49,21 +69,40 @@
       </p>
     </div>
     <button type="button" on:click={() => dispatch('enterStory')} disabled={busy}>
-      进入互动故事
+      {hasActiveSession ? '继续互动故事' : '进入互动故事'}
     </button>
   </section>
 
-  <ReviewWorkspace
-    {project}
-    {lorePreview}
-    {rulePreview}
-    {error}
-    on:saveCharacter={(event) => dispatch('saveCharacter', event.detail)}
-    on:saveWorldBook={(event) => dispatch('saveWorldBook', event.detail)}
-    on:deleteWorldBook={(event) => dispatch('deleteWorldBook', event.detail)}
-    on:saveRule={(event) => dispatch('saveRule', event.detail)}
-    on:deleteRule={(event) => dispatch('deleteRule', event.detail)}
-  />
+  {#if enterStoryError}
+    <p class="review-stage-error" role="alert">{enterStoryError}</p>
+  {/if}
+
+  {#if workspaceState}
+    <ReviewWorkspace
+      state={workspaceState}
+      on:setActiveSection={(event) =>
+        withWorkspace((controller) => controller.setActiveSection(event.detail))}
+      on:selectCharacter={(event) =>
+        withWorkspace((controller) => controller.selectCharacter(event.detail))}
+      on:selectWorldBookEntry={(event) =>
+        withWorkspace((controller) => controller.selectWorldBookEntry(event.detail))}
+      on:selectRule={(event) => withWorkspace((controller) => controller.selectRule(event.detail))}
+      on:updateCharacterDraft={(event) =>
+        withWorkspace((controller) => controller.updateCharacterDraft(event.detail))}
+      on:updateWorldBookDraft={(event) =>
+        withWorkspace((controller) => controller.updateWorldBookDraft(event.detail))}
+      on:updateRuleDraft={(event) =>
+        withWorkspace((controller) => controller.updateRuleDraft(event.detail))}
+      on:updatePreviewContext={(event) =>
+        withWorkspace((controller) => controller.updatePreviewContext(event.detail))}
+      on:saveCharacter={() => withWorkspace((controller) => controller.saveCharacter())}
+      on:saveWorldBook={() => withWorkspace((controller) => controller.saveWorldBook())}
+      on:deleteWorldBook={() => withWorkspace((controller) => controller.deleteWorldBook())}
+      on:saveRule={() => withWorkspace((controller) => controller.saveRule())}
+      on:deleteRule={() => withWorkspace((controller) => controller.deleteRule())}
+      on:refreshPreview={() => withWorkspace((controller) => controller.refreshPreview())}
+    />
+  {/if}
 </div>
 
 <style>
@@ -126,6 +165,13 @@
     background: #1f6a57;
     color: #f6f3eb;
     cursor: pointer;
+  }
+
+  .review-stage-error {
+    margin: 0;
+    padding: 0 4px;
+    color: #b14d3b;
+    font-size: 0.88rem;
   }
 
   .eyebrow {

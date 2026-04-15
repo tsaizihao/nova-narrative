@@ -5,6 +5,8 @@
 
   export let ending: EndingReport;
   export let session: SessionState;
+  export let busy = false;
+  export let busyLabel = '';
 
   const dispatch = createEventDispatcher<{ rewind: string }>();
 </script>
@@ -37,9 +39,17 @@
 
   <div class="rewind">
     <strong>从关键节点重写命运</strong>
+    <p class="rewind-copy">你可以带着刚刚得到的结局理解，回到任一关键节点重写命运。</p>
+    {#if busy && busyLabel}
+      <p class="rewind-status">{busyLabel}</p>
+    {/if}
     <div class="rewind-buttons">
       {#each session.available_checkpoints as checkpoint}
-        <button type="button" on:click={() => dispatch('rewind', checkpoint.checkpoint.id)}>
+        <button
+          type="button"
+          on:click={() => dispatch('rewind', checkpoint.checkpoint.id)}
+          disabled={busy}
+        >
           {checkpoint.checkpoint.label}
         </button>
       {/each}
@@ -131,6 +141,17 @@
     gap: 10px;
   }
 
+  .rewind-copy,
+  .rewind-status {
+    margin: 0 0 12px;
+    line-height: 1.7;
+    color: var(--reader-body);
+  }
+
+  .rewind-status {
+    color: var(--reader-accent);
+  }
+
   .rewind-buttons button {
     border: 1px solid var(--reader-border);
     border-radius: 999px;
@@ -139,6 +160,11 @@
     color: var(--reader-title);
     font: inherit;
     cursor: pointer;
+  }
+
+  .rewind-buttons button:disabled {
+    cursor: wait;
+    opacity: 0.7;
   }
 
   .rewind-buttons button:hover {

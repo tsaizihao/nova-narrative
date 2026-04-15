@@ -6,43 +6,57 @@
   import RuleBookPanel from './RuleBookPanel.svelte';
   import WorldBookPanel from './WorldBookPanel.svelte';
   import { REVIEW_SECTIONS, type ReviewSectionId } from '$lib/ui-layout';
-  import type {
-    ActiveLoreEntry,
-    CharacterCard,
-    NovelProject,
-    RuleDefinition,
-    RuleEvaluationResult,
-    WorldBookEntry
-  } from '$lib/types';
+  import type { CharacterCard, RuleDefinition, WorldBookEntry } from '$lib/types';
+  import type { ReviewWorkspaceState } from '$lib/modules/review/workspace';
 
-  export let project: NovelProject;
-  export let lorePreview: ActiveLoreEntry[] = [];
-  export let rulePreview: RuleEvaluationResult | null = null;
-  export let error = '';
-
-  let activeSection: ReviewSectionId = 'characters';
+  export let state: ReviewWorkspaceState;
 
   const dispatch = createEventDispatcher<{
-    saveCharacter: CharacterCard;
-    saveWorldBook: WorldBookEntry;
-    deleteWorldBook: string;
-    saveRule: RuleDefinition;
-    deleteRule: string;
+    setActiveSection: ReviewSectionId;
+    selectCharacter: string;
+    selectWorldBookEntry: string;
+    selectRule: string;
+    updateCharacterDraft: CharacterCard;
+    updateWorldBookDraft: WorldBookEntry;
+    updateRuleDraft: RuleDefinition;
+    updatePreviewContext: Partial<{
+      sceneId: string;
+      eventKind: string;
+      inputText: string;
+      actorCharacterId: string | null;
+      targetCharacterId: string | null;
+    }>;
+    saveCharacter: void;
+    saveWorldBook: void;
+    deleteWorldBook: void;
+    saveRule: void;
+    deleteRule: void;
+    refreshPreview: void;
   }>();
 
   $: activeCount =
-    activeSection === 'characters'
-      ? project.character_cards.length
-      : activeSection === 'worldbook'
-        ? project.worldbook_entries.length
-        : project.rules.length;
+    state.activeSection === 'characters'
+      ? state.project.character_cards.length
+      : state.activeSection === 'worldbook'
+        ? state.project.worldbook_entries.length
+        : state.project.rules.length;
 
   $: sectionTitle =
-    activeSection === 'characters'
+    state.activeSection === 'characters'
       ? '角色编辑'
-      : activeSection === 'worldbook'
+      : state.activeSection === 'worldbook'
         ? '世界书编辑'
         : '规则编辑';
+
+  $: sceneOptions = Object.values(state.project.story_package?.scenes ?? {}).map((scene) => ({
+    id: scene.id,
+    title: scene.title
+  }));
+
+  $: characterOptions = state.project.character_cards.map((card) => ({
+    id: card.id,
+    name: card.name
+  }));
 </script>
 
 <section class="workspace-shell">
@@ -56,35 +70,79 @@
       {#each REVIEW_SECTIONS as section}
         <button
           type="button"
-          class:active={section.id === activeSection}
-          on:click={() => (activeSection = section.id)}
+          class:active={section.id === state.activeSection}
+          on:click={() => dispatch('setActiveSection', section.id)}
         >
           {section.label}
         </button>
       {/each}
     </nav>
 
-    {#if activeSection === 'characters'}
+    {#if state.error}
+      <p class="workspace-error" role="alert">{state.error}</p>
+    {/if}
+
+    {#if state.activeSection === 'characters'}
       <CharacterReviewPanel
-        cards={project.character_cards}
-        on:save={(event) => dispatch('saveCharacter', event.detail)}
+        cards={state.project.character_cards}
+        activeId={state.activeSelection.characters}
+        draft={state.activeSelection.characters
+          ? state.drafts.characters[state.activeSelection.characters] ?? null
+          : null}
+        dirty={state.activeSelection.characters
+          ? state.dirty.characters[state.activeSelection.characters] ?? false
+          : false}
+        saveBusy={state.saveBusySection === 'characters'}
+        on:select={(event) => dispatch('selectCharacter', event.detail)}
+        on:change={(event) => dispatch('updateCharacterDraft', event.detail)}
+        on:save={() => dispatch('saveCharacter')}
       />
-    {:else if activeSection === 'worldbook'}
+    {:else if state.activeSection === 'worldbook'}
       <WorldBookPanel
-        entries={project.worldbook_entries}
-        on:save={(event) => dispatch('saveWorldBook', event.detail)}
-        on:remove={(event) => dispatch('deleteWorldBook', event.detail)}
+        entries={state.project.worldbook_entries}
+        activeId={state.activeSelection.worldbook}
+        draft={state.activeSelection.worldbook
+          ? state.drafts.worldbook[state.activeSelection.worldbook] ?? null
+          : null}
+        dirty={state.activeSelection.worldbook
+          ? state.dirty.worldbook[state.activeSelection.worldbook] ?? false
+          : false}
+        saveBusy={state.saveBusySection === 'worldbook'}
+        deleteBusy={state.deleteBusySection === 'worldbook'}
+        on:select={(event) => dispatch('selectWorldBookEntry', event.detail)}
+        on:change={(event) => dispatch('updateWorldBookDraft', event.detail)}
+        on:save={() => dispatch('saveWorldBook')}
+        on:remove={() => dispatch('deleteWorldBook')}
       />
     {:else}
       <RuleBookPanel
-        rules={project.rules}
-        on:save={(event) => dispatch('saveRule', event.detail)}
-        on:remove={(event) => dispatch('deleteRule', event.detail)}
+        rules={state.project.rules}
+        activeId={state.activeSelection.rules}
+        draft={state.activeSelection.rules ? state.drafts.rules[state.activeSelection.rules] ?? null : null}
+        dirty={state.activeSelection.rules
+          ? state.dirty.rules[state.activeSelection.rules] ?? false
+          : false}
+        saveBusy={state.saveBusySection === 'rules'}
+        deleteBusy={state.deleteBusySection === 'rules'}
+        on:select={(event) => dispatch('selectRule', event.detail)}
+        on:change={(event) => dispatch('updateRuleDraft', event.detail)}
+        on:save={() => dispatch('saveRule')}
+        on:remove={() => dispatch('deleteRule')}
       />
     {/if}
   </div>
 
-  <ReviewPreviewPanel {lorePreview} {rulePreview} {error} />
+  <ReviewPreviewPanel
+    draftContext={state.preview.previewContextDraft}
+    appliedContext={state.preview.appliedPreviewContext}
+    sceneOptions={sceneOptions}
+    characterOptions={characterOptions}
+    previewSnapshot={state.preview.previewSnapshot}
+    status={state.preview.previewStatus}
+    refreshError={state.preview.previewError}
+    on:updateContext={(event) => dispatch('updatePreviewContext', event.detail)}
+    on:refresh={() => dispatch('refreshPreview')}
+  />
 </section>
 
 <style>
@@ -110,7 +168,8 @@
   }
 
   h3,
-  .workspace-header span {
+  .workspace-header span,
+  .workspace-error {
     margin: 0;
   }
 
@@ -147,6 +206,12 @@
     border-color: rgba(31, 106, 87, 0.22);
     background: #1f6a57;
     color: #f6f3eb;
+  }
+
+  .workspace-error {
+    padding: 0 24px;
+    color: #b14d3b;
+    font-size: 0.84rem;
   }
 
   @media (max-width: 1120px) {

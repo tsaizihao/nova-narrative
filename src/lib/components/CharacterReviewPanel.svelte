@@ -4,21 +4,24 @@
   import type { CharacterCard } from '$lib/types';
 
   export let cards: CharacterCard[] = [];
+  export let activeId: string | null = null;
+  export let draft: CharacterCard | null = null;
+  export let dirty = false;
+  export let saveBusy = false;
 
-  const dispatch = createEventDispatcher<{ save: CharacterCard }>();
+  const dispatch = createEventDispatcher<{
+    select: string;
+    change: CharacterCard;
+    save: void;
+  }>();
 
-  let drafts: CharacterCard[] = [];
-  let previousCards: CharacterCard[] = [];
-  let activeIndex = 0;
+  function updateDraft(patch: Partial<CharacterCard>) {
+    if (!draft) return;
 
-  function cloneCard(card: CharacterCard): CharacterCard {
-    return JSON.parse(JSON.stringify(card)) as CharacterCard;
-  }
-
-  $: if (cards !== previousCards) {
-    drafts = cards.map(cloneCard);
-    previousCards = cards;
-    activeIndex = Math.min(activeIndex, Math.max(cards.length - 1, 0));
+    dispatch('change', {
+      ...draft,
+      ...patch
+    });
   }
 </script>
 
@@ -31,14 +34,14 @@
     <p class="count">{cards.length} 位角色</p>
   </div>
 
-  {#if drafts.length}
+  {#if cards.length && draft}
     <div class="workspace">
       <div class="entity-list">
-        {#each drafts as card, index}
+        {#each cards as card}
           <button
             type="button"
-            class:active={index === activeIndex}
-            on:click={() => (activeIndex = index)}
+            class:active={card.id === activeId}
+            on:click={() => dispatch('select', card.id)}
           >
             <strong>{card.name}</strong>
             <span>{card.identity || '待补充身份'}</span>
@@ -49,42 +52,70 @@
       <article class="editor">
         <label>
           <span>姓名</span>
-          <input bind:value={drafts[activeIndex].name} />
+          <input
+            value={draft.name}
+            on:input={(event) =>
+              updateDraft({ name: (event.currentTarget as HTMLInputElement).value })}
+          />
         </label>
         <div class="row">
           <label>
             <span>身份</span>
-            <input bind:value={drafts[activeIndex].identity} />
+            <input
+              value={draft.identity}
+              on:input={(event) =>
+                updateDraft({ identity: (event.currentTarget as HTMLInputElement).value })}
+            />
           </label>
           <label>
             <span>性别</span>
-            <input bind:value={drafts[activeIndex].gender} />
+            <input
+              value={draft.gender}
+              on:input={(event) =>
+                updateDraft({ gender: (event.currentTarget as HTMLInputElement).value })}
+            />
           </label>
         </div>
         <label>
           <span>摘要</span>
-          <textarea bind:value={drafts[activeIndex].summary} rows="3"></textarea>
+          <textarea
+            rows="3"
+            value={draft.summary}
+            on:input={(event) =>
+              updateDraft({ summary: (event.currentTarget as HTMLTextAreaElement).value })}
+          ></textarea>
         </label>
         <label>
           <span>欲望</span>
-          <textarea bind:value={drafts[activeIndex].desire} rows="2"></textarea>
+          <textarea
+            rows="2"
+            value={draft.desire}
+            on:input={(event) =>
+              updateDraft({ desire: (event.currentTarget as HTMLTextAreaElement).value })}
+          ></textarea>
         </label>
         <label>
           <span>秘密（用 `；` 分隔）</span>
           <textarea
-            value={drafts[activeIndex].secrets.join('；')}
             rows="2"
-            on:input={(event) => {
-              drafts[activeIndex].secrets = event.currentTarget.value
-                .split('；')
-                .map((item) => item.trim())
-                .filter(Boolean);
-              drafts = drafts;
-            }}
+            value={draft.secrets.join('；')}
+            on:input={(event) =>
+              updateDraft({
+                secrets: (event.currentTarget as HTMLTextAreaElement).value
+                  .split('；')
+                  .map((item) => item.trim())
+                  .filter(Boolean)
+              })}
           ></textarea>
         </label>
-        <button type="button" class="primary" on:click={() => dispatch('save', drafts[activeIndex])}>
-          保存并刷新预览
+        <p class="state">{dirty ? '有未保存更改' : '已与当前项目同步'}</p>
+        <button
+          type="button"
+          class="primary"
+          disabled={saveBusy}
+          on:click={() => dispatch('save')}
+        >
+          保存更改
         </button>
       </article>
     </div>
@@ -121,7 +152,8 @@
 
   h3,
   .count,
-  .empty {
+  .empty,
+  .state {
     margin: 0;
   }
 
@@ -132,13 +164,18 @@
   }
 
   .count,
-  .empty {
+  .empty,
+  .state {
     color: rgba(63, 47, 35, 0.58);
+  }
+
+  .count,
+  .state {
+    font-size: 0.8rem;
   }
 
   .count {
     padding-top: 4px;
-    font-size: 0.8rem;
   }
 
   .workspace {
@@ -227,6 +264,11 @@
     color: #f6f3eb;
     cursor: pointer;
     font-weight: 700;
+  }
+
+  .primary:disabled {
+    cursor: progress;
+    opacity: 0.72;
   }
 
   @media (max-width: 960px) {

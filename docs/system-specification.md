@@ -1,5 +1,9 @@
 # 叙世者系统 Specification
 
+> 当前仓库的架构主入口已切换到 [docs/architecture-guide.md](/Users/caizihao/github/tsaizihao/nova-narrative/.worktrees/codex-v1-architecture-foundation/docs/architecture-guide.md)，实施顺序主入口已切换到 [docs/implementation-roadmap-v1.md](/Users/caizihao/github/tsaizihao/nova-narrative/.worktrees/codex-v1-architecture-foundation/docs/implementation-roadmap-v1.md)。
+>
+> 本文档仍然是系统语义、术语和目标行为的重要参考，但不再单独承担“架构总蓝图 + 实施路线图”两种职责。
+
 ## 文档定位与使用方式
 
 本文档是 `叙世者` 的系统级 specification，面向产品、设计与研发混合读者，用于统一回答三个问题：

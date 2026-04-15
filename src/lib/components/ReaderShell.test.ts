@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import ReaderDesktopShell from './ReaderDesktopShell.svelte';
 import ReaderMobileShell from './ReaderMobileShell.svelte';
-import type { ScenePayload, SessionState } from '$lib/types';
+import type { RuntimeSnapshot, ScenePayload, SessionState } from '$lib/types';
 
 const storyState = {
   current_scene_id: 'scene-1',
@@ -26,7 +26,24 @@ const session: SessionState = {
   relationship_deltas: {},
   rule_flags: [],
   major_choices: [],
-  available_checkpoints: [],
+  available_checkpoints: [
+    {
+      checkpoint: {
+        id: 'checkpoint-1',
+        label: '城门前',
+        scene_id: 'scene-1'
+      },
+      current_scene_id: 'scene-1',
+      visited_scenes: ['scene-1'],
+      known_facts: [],
+      relationship_deltas: {},
+      rule_flags: [],
+      major_choices: [],
+      story_state: storyState,
+      lore_lifecycle: [],
+      last_active_rules: []
+    }
+  ],
   free_input_history: [],
   story_state: storyState,
   lore_lifecycle: [],
@@ -84,13 +101,25 @@ const payload: ScenePayload = {
   story_state: storyState
 };
 
+const snapshot: RuntimeSnapshot = {
+  payload,
+  codex: {
+    characters: [],
+    locations: [],
+    world_rules: [],
+    relationships: [],
+    timeline: [],
+    recent_choices: [],
+    worldbook_entries: [],
+    rules: []
+  }
+};
+
 describe('ReaderDesktopShell', () => {
   it('renders the main stage before the world and state rails', () => {
     const { container } = render(ReaderDesktopShell, {
       props: {
-        payload,
-        codex: null,
-        session,
+        snapshot,
         freeInput: '',
         busy: false,
         error: ''
@@ -102,14 +131,29 @@ describe('ReaderDesktopShell', () => {
     expect(screen.getByText('世界状态')).toBeInTheDocument();
     expect(container.querySelector('.reader-desktop')).toHaveAttribute('data-tone', 'paper');
   });
+
+  it('disables checkpoint rewinds in the world rail while the runtime is rewinding', async () => {
+    render(ReaderDesktopShell, {
+      props: {
+        snapshot,
+        freeInput: '',
+        busy: true,
+        busyLabel: '正在回溯到关键节点',
+        error: ''
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '抉择' }));
+
+    expect(screen.getByRole('button', { name: '城门前' })).toBeDisabled();
+  });
 });
 
 describe('ReaderMobileShell', () => {
   it('keeps lore and state hidden until their drawers are opened', async () => {
     const { container } = render(ReaderMobileShell, {
       props: {
-        payload,
-        codex: null,
+        snapshot,
         freeInput: '',
         busy: false,
         error: ''
@@ -134,5 +178,22 @@ describe('ReaderMobileShell', () => {
 
     await fireEvent.keyDown(stateDialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '世界状态' })).not.toBeInTheDocument();
+  });
+
+  it('surfaces the same rewind lock inside the mobile world drawer', async () => {
+    render(ReaderMobileShell, {
+      props: {
+        snapshot,
+        freeInput: '',
+        busy: true,
+        busyLabel: '正在回溯到关键节点',
+        error: ''
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '打开世界信息' }));
+    await fireEvent.click(screen.getByRole('button', { name: '抉择' }));
+
+    expect(screen.getByRole('button', { name: '城门前' })).toBeDisabled();
   });
 });

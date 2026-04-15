@@ -5,21 +5,26 @@
   import type { WorldBookEntry } from '$lib/types';
 
   export let entries: WorldBookEntry[] = [];
+  export let activeId: string | null = null;
+  export let draft: WorldBookEntry | null = null;
+  export let dirty = false;
+  export let saveBusy = false;
+  export let deleteBusy = false;
 
-  const dispatch = createEventDispatcher<{ save: WorldBookEntry; remove: string }>();
+  const dispatch = createEventDispatcher<{
+    select: string;
+    change: WorldBookEntry;
+    save: void;
+    remove: void;
+  }>();
 
-  let drafts: WorldBookEntry[] = [];
-  let previousEntries: WorldBookEntry[] = [];
-  let activeIndex = 0;
+  function updateDraft(patch: Partial<WorldBookEntry>) {
+    if (!draft) return;
 
-  function cloneEntry(entry: WorldBookEntry): WorldBookEntry {
-    return JSON.parse(JSON.stringify(entry)) as WorldBookEntry;
-  }
-
-  $: if (entries !== previousEntries) {
-    drafts = entries.map(cloneEntry);
-    previousEntries = entries;
-    activeIndex = Math.min(activeIndex, Math.max(entries.length - 1, 0));
+    dispatch('change', {
+      ...draft,
+      ...patch
+    });
   }
 </script>
 
@@ -32,14 +37,14 @@
     <p class="count">{entries.length} 条 lore</p>
   </div>
 
-  {#if drafts.length}
+  {#if entries.length && draft}
     <div class="workspace">
       <div class="entity-list">
-        {#each drafts as entry, index}
+        {#each entries as entry}
           <button
             type="button"
-            class:active={index === activeIndex}
-            on:click={() => (activeIndex = index)}
+            class:active={entry.id === activeId}
+            on:click={() => dispatch('select', entry.id)}
           >
             <strong>{entry.title}</strong>
             <span>{loreSlotLabel(entry.insertion_mode)}</span>
@@ -50,12 +55,23 @@
       <article class="editor">
         <label>
           <span>标题</span>
-          <input bind:value={drafts[activeIndex].title} />
+          <input
+            value={draft.title}
+            on:input={(event) =>
+              updateDraft({ title: (event.currentTarget as HTMLInputElement).value })}
+          />
         </label>
         <div class="row">
           <label>
             <span>插槽</span>
-            <select bind:value={drafts[activeIndex].insertion_mode}>
+            <select
+              value={draft.insertion_mode}
+              on:change={(event) =>
+                updateDraft({
+                  insertion_mode: (event.currentTarget as HTMLSelectElement)
+                    .value as WorldBookEntry['insertion_mode']
+                })}
+            >
               <option value="scene_prelude">场景前奏</option>
               <option value="rules_guard">规则守卫</option>
               <option value="codex_only">阅读侧栏</option>
@@ -63,21 +79,42 @@
           </label>
           <label class="toggle">
             <span>启用</span>
-            <input type="checkbox" bind:checked={drafts[activeIndex].enabled} />
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              on:change={(event) =>
+                updateDraft({ enabled: (event.currentTarget as HTMLInputElement).checked })}
+            />
           </label>
         </div>
         <label>
           <span>内容</span>
-          <textarea bind:value={drafts[activeIndex].content} rows="5"></textarea>
+          <textarea
+            rows="5"
+            value={draft.content}
+            on:input={(event) =>
+              updateDraft({ content: (event.currentTarget as HTMLTextAreaElement).value })}
+          ></textarea>
         </label>
         <p class="meta">
-          {drafts[activeIndex].source} · {loreSlotLabel(drafts[activeIndex].insertion_mode)}
+          {draft.source} · {loreSlotLabel(draft.insertion_mode)}
         </p>
+        <p class="state">{dirty ? '有未保存更改' : '已与当前项目同步'}</p>
         <div class="actions">
-          <button type="button" class="primary" on:click={() => dispatch('save', drafts[activeIndex])}>
-            保存并刷新预览
+          <button
+            type="button"
+            class="primary"
+            disabled={saveBusy}
+            on:click={() => dispatch('save')}
+          >
+            保存更改
           </button>
-          <button type="button" class="ghost" on:click={() => dispatch('remove', drafts[activeIndex].id)}>
+          <button
+            type="button"
+            class="ghost"
+            disabled={deleteBusy}
+            on:click={() => dispatch('remove')}
+          >
             删除条目
           </button>
         </div>
@@ -116,7 +153,9 @@
 
   h3,
   .count,
-  .empty {
+  .empty,
+  .meta,
+  .state {
     margin: 0;
   }
 
@@ -127,13 +166,20 @@
   }
 
   .count,
-  .empty {
+  .empty,
+  .meta,
+  .state {
     color: rgba(63, 47, 35, 0.58);
+  }
+
+  .count,
+  .meta,
+  .state {
+    font-size: 0.8rem;
   }
 
   .count {
     padding-top: 4px;
-    font-size: 0.8rem;
   }
 
   .workspace {
@@ -169,8 +215,7 @@
     color: #2f261d;
   }
 
-  .entity-list span,
-  .meta {
+  .entity-list span {
     color: rgba(63, 47, 35, 0.62);
     font-size: 0.82rem;
   }
@@ -245,6 +290,12 @@
   .ghost {
     background: rgba(121, 103, 81, 0.08);
     color: #5f4f3e;
+  }
+
+  .primary:disabled,
+  .ghost:disabled {
+    cursor: progress;
+    opacity: 0.72;
   }
 
   @media (max-width: 960px) {

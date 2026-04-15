@@ -38,6 +38,24 @@ pub struct BuildStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SavedProjectActivityKind {
+    Project,
+    Session,
+    Ending,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedProjectLibraryEntry {
+    pub project: NovelProject,
+    pub session_id: Option<String>,
+    pub current_scene_title: Option<String>,
+    pub ending_type: Option<String>,
+    pub last_activity_at: i64,
+    pub last_activity_kind: SavedProjectActivityKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExternalProviderSettingsSnapshot {
     pub base_url: String,
     pub model: String,
@@ -123,6 +141,8 @@ pub struct NovelProject {
     pub character_cards: Vec<CharacterCard>,
     pub worldbook_entries: Vec<WorldBookEntry>,
     pub rules: Vec<RuleDefinition>,
+    #[serde(default)]
+    pub review_preview_context: Option<ReviewPreviewContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -311,4 +331,59 @@ pub struct ScenePayload {
     pub active_lore: Vec<ActiveLoreEntry>,
     pub active_rules: Vec<ActiveRuleHit>,
     pub story_state: StoryState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RuntimeSnapshot {
+    pub payload: ScenePayload,
+    pub codex: StoryCodex,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewPreviewContext {
+    pub scene_id: String,
+    pub event_kind: String,
+    pub input_text: String,
+    pub actor_character_id: Option<String>,
+    pub target_character_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectedSceneChoicePreview {
+    pub id: String,
+    pub label: String,
+    pub intent_tag: String,
+    pub next_scene_id: String,
+    pub unlock_conditions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectedOutcomePreview {
+    pub blocked: bool,
+    pub stays_on_scene: bool,
+    pub next_scene_id: Option<String>,
+    pub next_scene_title: Option<String>,
+    pub next_scene_summary: Option<String>,
+    pub candidate_choices: Vec<ProjectedSceneChoicePreview>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewPreviewExplanations {
+    pub lore_summary: String,
+    pub rule_summary: String,
+    pub outcome_summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewPreviewSnapshot {
+    pub context: ReviewPreviewContext,
+    pub lore_preview: Vec<ActiveLoreEntry>,
+    pub rule_preview: crate::runtime::RuleEvaluationResult,
+    pub projected_outcome: ProjectedOutcomePreview,
+    pub explanations: ReviewPreviewExplanations,
 }

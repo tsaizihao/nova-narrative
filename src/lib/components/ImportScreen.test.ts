@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import ImportScreen from './ImportScreen.svelte';
-import type { AppAiSettingsSnapshot, SaveAiSettingsInput } from '$lib/types';
+import type { AppAiSettingsSnapshot, NovelProject, SaveAiSettingsInput } from '$lib/types';
 
 describe('ImportScreen', () => {
   const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight');
@@ -34,6 +34,128 @@ describe('ImportScreen', () => {
       api_key: ''
     }
   };
+  const resumableProjects: Array<{
+    project: NovelProject;
+    sessionId: string | null;
+    activityLabel: string;
+    activityTimeLabel: string;
+    ctaLabel: string;
+  }> = [
+    {
+      project: {
+        id: 'project-1',
+        name: '临川夜话',
+        raw_text: '第1章 雨夜来客',
+        chapters: [],
+        build_status: {
+          stage: 'ready',
+          message: 'Story package ready',
+          progress: 100
+        },
+        story_package: {
+          story_bible: {
+            title: '临川夜话',
+            characters: [],
+            locations: [],
+            timeline: [],
+            world_rules: [],
+            relationships: [],
+            core_conflicts: []
+          },
+          world_model: {
+            character_cards: [],
+            worldbook_entries: [],
+            rules: []
+          },
+          start_scene_id: 'scene-1',
+          scenes: {}
+        },
+        character_cards: [],
+        worldbook_entries: [],
+        rules: []
+      },
+      sessionId: 'session-1',
+      activityLabel: '上次停在：北门之夜',
+      activityTimeLabel: '15 分钟前',
+      ctaLabel: '继续互动临川夜话'
+    },
+    {
+      project: {
+        id: 'project-3',
+        name: '归潮纪',
+        raw_text: '第1章 雨夜来客',
+        chapters: [],
+        build_status: {
+          stage: 'ready',
+          message: 'Story package ready',
+          progress: 100
+        },
+        story_package: {
+          story_bible: {
+            title: '归潮纪',
+            characters: [],
+            locations: [],
+            timeline: [],
+            world_rules: [],
+            relationships: [],
+            core_conflicts: []
+          },
+          world_model: {
+            character_cards: [],
+            worldbook_entries: [],
+            rules: []
+          },
+          start_scene_id: 'scene-1',
+          scenes: {}
+        },
+        character_cards: [],
+        worldbook_entries: [],
+        rules: []
+      },
+      sessionId: 'session-ending',
+      activityLabel: '已抵达结局：灰烬归档',
+      activityTimeLabel: '昨天',
+      ctaLabel: '查看结局归潮纪'
+    },
+    {
+      project: {
+        id: 'project-2',
+        name: '霜桥夜行',
+        raw_text: '第1章 雨夜来客',
+        chapters: [],
+        build_status: {
+          stage: 'ready',
+          message: 'Story package ready',
+          progress: 100
+        },
+        story_package: {
+          story_bible: {
+            title: '霜桥夜行',
+            characters: [],
+            locations: [],
+            timeline: [],
+            world_rules: [],
+            relationships: [],
+            core_conflicts: []
+          },
+          world_model: {
+            character_cards: [],
+            worldbook_entries: [],
+            rules: []
+          },
+          start_scene_id: 'scene-1',
+          scenes: {}
+        },
+        character_cards: [],
+        worldbook_entries: [],
+        rules: []
+      },
+      sessionId: null,
+      activityLabel: '尚未开始互动，可先进入审阅',
+      activityTimeLabel: '2026-04-01',
+      ctaLabel: '进入审阅霜桥夜行'
+    }
+  ];
 
   beforeEach(() => {
     Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', {
@@ -61,6 +183,7 @@ describe('ImportScreen', () => {
         error: '',
         aiSettings,
         aiDraft,
+        resumableProjects: [],
         settingsBusy: false
       }
     });
@@ -79,6 +202,7 @@ describe('ImportScreen', () => {
       error: '',
       aiSettings,
       aiDraft,
+      resumableProjects: [],
       settingsBusy: false
     });
     await tick();
@@ -103,6 +227,7 @@ describe('ImportScreen', () => {
             api_key: ''
           }
         },
+        resumableProjects: [],
         settingsBusy: false
       }
     });
@@ -117,6 +242,7 @@ describe('ImportScreen', () => {
       error: '',
       aiSettings,
       aiDraft,
+      resumableProjects: [],
       settingsBusy: false
     });
 
@@ -132,6 +258,7 @@ describe('ImportScreen', () => {
         error: '',
         aiSettings,
         aiDraft,
+        resumableProjects: [],
         settingsBusy: false
       }
     });
@@ -139,5 +266,32 @@ describe('ImportScreen', () => {
     expect(screen.getByText('导入提示')).toBeInTheDocument();
     expect(screen.getAllByText('优先粘贴完整章节正文')).toHaveLength(2);
     expect(screen.getByText('这一步会产出')).toBeInTheDocument();
+  });
+
+  it('surfaces saved projects with different actions for resumable sessions and review-only entries', () => {
+    render(ImportScreen, {
+      props: {
+        projectName: '',
+        novelText: '',
+        busy: false,
+        error: '',
+        aiSettings,
+        aiDraft,
+        resumableProjects,
+        settingsBusy: false
+      }
+    });
+
+    expect(screen.getByText('继续已有项目')).toBeInTheDocument();
+    expect(screen.getByText('临川夜话')).toBeInTheDocument();
+    expect(screen.getByText('上次停在：北门之夜')).toBeInTheDocument();
+    expect(screen.getByText('15 分钟前')).toBeInTheDocument();
+    expect(screen.getByText('已抵达结局：灰烬归档')).toBeInTheDocument();
+    expect(screen.getByText('昨天')).toBeInTheDocument();
+    expect(screen.getByText('尚未开始互动，可先进入审阅')).toBeInTheDocument();
+    expect(screen.getByText('2026-04-01')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '继续互动临川夜话' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看结局归潮纪' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '进入审阅霜桥夜行' })).toBeInTheDocument();
   });
 });

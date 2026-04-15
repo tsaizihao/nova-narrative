@@ -2,33 +2,46 @@
   import ReaderStage from './ReaderStage.svelte';
   import StoryCodexPanel from './StoryCodexPanel.svelte';
   import StoryStatePanel from './StoryStatePanel.svelte';
-  import type { ScenePayload, SessionState, StoryCodex } from '$lib/types';
+  import type { RuntimeSnapshot } from '$lib/types';
 
-  export let payload: ScenePayload;
-  export let codex: StoryCodex | null = null;
-  export let session: SessionState;
+  export let snapshot: RuntimeSnapshot;
   export let freeInput = '';
   export let busy = false;
+  export let busyLabel = '';
   export let error = '';
 </script>
 
 <section class="reader-desktop" data-tone="paper">
   <aside class="rail rail-left">
     <StoryCodexPanel
-      {codex}
-      {session}
-      activeLore={payload.active_lore}
-      activeRules={payload.active_rules}
+      codex={snapshot.codex}
+      session={snapshot.payload.session}
+      activeLore={snapshot.payload.active_lore}
+      activeRules={snapshot.payload.active_rules}
+      {busy}
+      {busyLabel}
       on:rewind
     />
   </aside>
 
   <div class="stage-column">
-    <ReaderStage {payload} {freeInput} {busy} {error} on:choose on:freeInputChange on:submitFreeInput />
+    <ReaderStage
+      payload={snapshot.payload}
+      {freeInput}
+      {busy}
+      {busyLabel}
+      {error}
+      on:choose
+      on:freeInputChange
+      on:submitFreeInput
+    />
   </div>
 
   <aside class="rail rail-right">
-    <StoryStatePanel storyState={payload.story_state} activeRules={payload.active_rules} />
+    <StoryStatePanel
+      storyState={snapshot.payload.story_state}
+      activeRules={snapshot.payload.active_rules}
+    />
   </aside>
 </section>
 

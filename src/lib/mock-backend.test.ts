@@ -48,3 +48,152 @@ describe('mockBackend AI settings', () => {
     expect(cleared.openrouter.has_api_key).toBe(false);
   });
 });
+
+describe('mockBackend import/build flow', () => {
+  it('rejects whitespace-only imports without mutating the current project snapshot', async () => {
+    const project = await mockBackend.create_project('临川夜话');
+    const imported = await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚听见了钟声。'].join('\n')
+    );
+
+    await expect(mockBackend.import_novel_text(project.id, '   \n\t  ')).rejects.toThrow();
+
+    const current = await mockBackend.get_project(project.id);
+    expect(current.raw_text).toBe(imported.raw_text);
+    expect(current.chapters).toHaveLength(imported.chapters.length);
+    expect(current.build_status.stage).toBe('imported');
+  });
+
+  it('re-import clears derived artifacts and invalidates existing sessions', async () => {
+    await mockBackend.save_ai_settings({
+      selected_provider: 'heuristic',
+      openai_compatible: {
+        base_url: '',
+        model: ''
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: ''
+      }
+    });
+
+    const project = await mockBackend.create_project('临川夜话');
+    await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚听见了钟声。'].join('\n')
+    );
+    await mockBackend.build_story_package(project.id);
+
+    const session = await mockBackend.start_session(project.id);
+    const reimported = await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 新夜', '', '另一段故事开始了。'].join('\n')
+    );
+
+    expect(reimported.story_package).toBeNull();
+    expect(reimported.character_cards).toHaveLength(0);
+    expect(reimported.worldbook_entries).toHaveLength(0);
+    expect(reimported.rules).toHaveLength(0);
+    expect(reimported.build_status.stage).toBe('imported');
+
+    await expect(mockBackend.get_current_scene(session.session_id)).rejects.toThrow();
+  });
+
+  it('persists failed build status when external provider configuration is incomplete', async () => {
+    const project = await mockBackend.create_project('临川夜话');
+    await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚听见了钟声。'].join('\n')
+    );
+    await mockBackend.save_ai_settings({
+      selected_provider: 'openai_compatible',
+      openai_compatible: {
+        base_url: 'https://example.com/v1',
+        model: '',
+        api_key: ''
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: ''
+      }
+    });
+
+    await expect(mockBackend.build_story_package(project.id)).rejects.toThrow();
+
+    const failed = await mockBackend.get_build_status(project.id);
+    expect(failed.stage).toBe('failed');
+    expect(failed.error).toBeTruthy();
+  });
+
+  it('returns a runtime snapshot whose codex and payload come from the same session state', async () => {
+    await mockBackend.save_ai_settings({
+      selected_provider: 'heuristic',
+      openai_compatible: {
+        base_url: '',
+        model: ''
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: ''
+      }
+    });
+
+    const project = await mockBackend.create_project('临川夜话');
+    await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚听见了钟声。'].join('\n')
+    );
+    await mockBackend.build_story_package(project.id);
+
+    const session = await mockBackend.start_session(project.id);
+    const current = await mockBackend.get_current_scene(session.session_id);
+    await mockBackend.submit_choice(session.session_id, current.scene.candidate_choices[0].id);
+
+    const snapshot = await mockBackend.get_runtime_snapshot(session.session_id);
+
+    expect(snapshot.payload.session.session_id).toBe(session.session_id);
+    expect(snapshot.payload.session.major_choices).toEqual(snapshot.codex.recent_choices);
+    expect(snapshot.payload.story_state.current_scene_id).toBe(
+      snapshot.payload.session.current_scene_id
+    );
+  });
+
+  it('round-trips aggregated review preview context without persisting snapshots', async () => {
+    await mockBackend.save_ai_settings({
+      selected_provider: 'heuristic',
+      openai_compatible: {
+        base_url: '',
+        model: ''
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: ''
+      }
+    });
+
+    const project = await mockBackend.create_project('临川夜话');
+    await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚在午夜来到北门。'].join('\n')
+    );
+    await mockBackend.build_story_package(project.id);
+
+    const context = {
+      sceneId: 'scene-1',
+      eventKind: 'open_gate',
+      inputText: '午夜去开门',
+      actorCharacterId: 'character-1',
+      targetCharacterId: 'character-2'
+    };
+
+    const preview = await mockBackend.preview_review_snapshot(project.id, context);
+    const saved = await mockBackend.save_review_preview_context(project.id, preview.context);
+    const reloaded = await mockBackend.get_project(project.id);
+
+    expect(preview.context.sceneId).toBe('scene-1');
+    expect(preview.explanations.outcomeSummary).toBeTruthy();
+    expect(saved).toEqual(context);
+    expect(reloaded.review_preview_context).toEqual(context);
+  });
+});

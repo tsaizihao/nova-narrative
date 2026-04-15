@@ -6,6 +6,7 @@
 
   export let payload: ScenePayload;
   export let busy = false;
+  export let busyLabel = '';
   export let error = '';
   export let freeInput = '';
 
@@ -59,10 +60,15 @@
   </div>
 
   <div class="decision-sheet">
+    {#if busy && busyLabel}
+      <p class="busy-hint">{busyLabel}</p>
+    {/if}
+
     <div class="choices">
       {#each payload.scene.candidate_choices as choice}
         <button
           type="button"
+          aria-label={choice.label}
           class:locked={choice.unlock_conditions.length > 0 && !choice.unlock_conditions.every((condition) => payload.session.rule_flags.includes(condition))}
           on:click={() => dispatch('choose', choice.id)}
           disabled={busy}
@@ -97,7 +103,11 @@
           on:click={() => dispatch('submitFreeInput')}
           disabled={busy || !freeInput.trim()}
         >
-          把这句话写进故事
+          {#if busy && busyLabel}
+            {busyLabel}
+          {:else}
+            把这句话写进故事
+          {/if}
         </button>
       </div>
     {/if}
@@ -330,6 +340,12 @@
   .error {
     margin: 0;
     color: var(--reader-danger, #b14d3b);
+  }
+
+  .busy-hint {
+    margin: 0;
+    color: var(--reader-accent, #1f6a57);
+    font-size: 0.86rem;
   }
 
   @media (max-width: 720px) {

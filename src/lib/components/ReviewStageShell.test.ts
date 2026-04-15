@@ -1,20 +1,21 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import ReviewStageShell from './ReviewStageShell.svelte';
 import type { NovelProject, RuleEvaluationResult, StoryState } from '$lib/types';
 
-const project: NovelProject = {
-  id: 'project-1',
-  name: '临川夜话',
-  raw_text: '原文',
-  chapters: [],
-  build_status: { stage: 'ready', message: 'done', progress: 100 },
-  story_package: null,
-  character_cards: [],
-  worldbook_entries: [],
-  rules: []
-};
+const reviewBackend = vi.hoisted(() => ({
+  updateCharacterCard: vi.fn(),
+  upsertWorldBookEntry: vi.fn(),
+  deleteWorldBookEntry: vi.fn(),
+  upsertRule: vi.fn(),
+  deleteRule: vi.fn(),
+  previewReviewSnapshot: vi.fn(),
+  saveReviewPreviewContext: vi.fn()
+}));
+
+vi.mock('$lib/modules/review/backend', () => reviewBackend);
+
+import ReviewStageShell from './ReviewStageShell.svelte';
 
 const storyState: StoryState = {
   current_scene_id: 'scene-1',
@@ -28,21 +29,97 @@ const storyState: StoryState = {
   checkpoints: []
 };
 
-const rulePreview: RuleEvaluationResult = {
-  story_state: storyState,
-  active_rules: [],
-  blocked: false
+const project: NovelProject = {
+  id: 'project-1',
+  name: '临川夜话',
+  raw_text: '原文',
+  chapters: [],
+  build_status: { stage: 'ready', message: 'done', progress: 100 },
+  story_package: {
+    story_bible: {
+      title: '临川夜话',
+      characters: [],
+      locations: [],
+      timeline: [],
+      world_rules: [],
+      relationships: [],
+      core_conflicts: []
+    },
+    world_model: {
+      character_cards: [],
+      worldbook_entries: [],
+      rules: []
+    },
+    start_scene_id: 'scene-1',
+    scenes: {}
+  },
+  character_cards: [
+    {
+      id: 'char-1',
+      name: '沈砚',
+      gender: '男',
+      age: 27,
+      identity: '巡夜人',
+      faction: '巡城司',
+      role: '主角',
+      summary: '在雨夜追查失踪案。',
+      desire: '找回妹妹',
+      secrets: ['曾与嫌疑人合作'],
+      traits: ['冷静'],
+      abilities: ['追踪'],
+      mutable_state: {}
+    }
+  ],
+  worldbook_entries: [],
+  rules: []
 };
 
 describe('ReviewStageShell', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    reviewBackend.updateCharacterCard.mockResolvedValue(project.character_cards);
+    reviewBackend.previewReviewSnapshot.mockResolvedValue({
+      context: {
+        sceneId: 'scene-1',
+        eventKind: 'open_gate',
+        inputText: '午夜去开门',
+        actorCharacterId: null,
+        targetCharacterId: null
+      },
+      lorePreview: [],
+      rulePreview: {
+        story_state: storyState,
+        active_rules: [],
+        blocked: false
+      },
+      projectedOutcome: {
+        blocked: false,
+        staysOnScene: true,
+        nextSceneId: null,
+        nextSceneTitle: null,
+        nextSceneSummary: null,
+        candidateChoices: []
+      },
+      explanations: {
+        loreSummary: '没有新增 lore 命中',
+        ruleSummary: '没有规则阻止当前动作',
+        outcomeSummary: '当前上下文下不会推进到新场景'
+      }
+    });
+    reviewBackend.saveReviewPreviewContext.mockResolvedValue({
+      sceneId: 'scene-1',
+      eventKind: 'open_gate',
+      inputText: '午夜去开门',
+      actorCharacterId: null,
+      targetCharacterId: null
+    });
+  });
+
   it('renders a compact review strip and dispatches the reader CTA', async () => {
     const enterStory = vi.fn();
     render(ReviewStageShell, {
       props: {
         project,
-        lorePreview: [],
-        rulePreview,
-        error: '',
         busy: false
       },
       events: {
@@ -54,8 +131,8 @@ describe('ReviewStageShell', () => {
     const strip = screen.getByTestId('review-stage-strip');
     expect(within(strip).getByText('Review')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '先校正世界模型，再进入故事' })).toBeInTheDocument();
-    expect(screen.getByTestId('review-stage-strip')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '进入互动故事' })).toBeInTheDocument();
+    expect(await screen.findByText('预览已就绪')).toBeInTheDocument();
 
     const stepper = screen.getByRole('list');
     const stepItems = within(stepper).getAllByRole('listitem');
@@ -68,47 +145,41 @@ describe('ReviewStageShell', () => {
     expect(enterStory).toHaveBeenCalledTimes(1);
   });
 
-  it('forwards saveCharacter from the mounted workspace', async () => {
-    const saveCharacter = vi.fn();
+  it('switches the reader CTA copy when an active session can be resumed', () => {
     render(ReviewStageShell, {
       props: {
-        project: {
-          ...project,
-          character_cards: [
-            {
-              id: 'char-1',
-              name: '沈砚',
-              gender: '男',
-              age: 27,
-              identity: '巡夜人',
-              faction: '巡城司',
-              role: '主角',
-              summary: '在雨夜追查失踪案。',
-              desire: '找回妹妹',
-              secrets: ['曾与嫌疑人合作'],
-              traits: ['冷静'],
-              abilities: ['追踪'],
-              mutable_state: {}
-            }
-          ]
-        },
-        lorePreview: [],
-        rulePreview,
-        error: '',
-        busy: false
-      },
-      events: {
-        saveCharacter
+        project,
+        busy: false,
+        hasActiveSession: true
       }
     });
 
-    const editorColumn = screen.getByTestId('review-editor-column');
-    await fireEvent.click(within(editorColumn).getByRole('button', { name: '保存并刷新预览' }));
+    expect(screen.getByRole('button', { name: '继续互动故事' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '进入互动故事' })).not.toBeInTheDocument();
+  });
 
-    expect(saveCharacter).toHaveBeenCalledTimes(1);
-    expect(saveCharacter.mock.calls[0][0].detail).toMatchObject({
-      id: 'char-1',
-      name: '沈砚'
+  it('saves edits without using legacy split preview commands and can manually rerun aggregated preview', async () => {
+    render(ReviewStageShell, {
+      props: {
+        project,
+        busy: false
+      }
     });
+
+    await screen.findByText('预览已就绪');
+    reviewBackend.previewReviewSnapshot.mockClear();
+    reviewBackend.saveReviewPreviewContext.mockClear();
+
+    const editorColumn = screen.getByTestId('review-editor-column');
+    await fireEvent.click(within(editorColumn).getByRole('button', { name: '保存更改' }));
+
+    expect(reviewBackend.updateCharacterCard).toHaveBeenCalledTimes(1);
+    expect(reviewBackend.previewReviewSnapshot).not.toHaveBeenCalled();
+    expect(screen.getByText('预览已过期')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: '刷新预览' }));
+
+    expect(reviewBackend.previewReviewSnapshot).toHaveBeenCalledTimes(1);
+    expect(reviewBackend.saveReviewPreviewContext).toHaveBeenCalledTimes(1);
   });
 });

@@ -79,4 +79,19 @@ describe('EndingScreen', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: '第1章 雨夜来客' }));
   });
+
+  it('surfaces rewind guidance and disables checkpoint buttons while rewinding', () => {
+    render(EndingScreen, {
+      props: {
+        ending,
+        session,
+        busy: true,
+        busyLabel: '正在回溯到关键节点'
+      }
+    });
+
+    expect(screen.getByText('你可以带着刚刚得到的结局理解，回到任一关键节点重写命运。')).toBeInTheDocument();
+    expect(screen.getByText('正在回溯到关键节点')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '第1章 雨夜来客' })).toBeDisabled();
+  });
 });
