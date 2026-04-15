@@ -306,9 +306,12 @@ export interface CheckpointSnapshot {
   last_active_rules: ActiveRuleHit[];
 }
 
+export type SessionStatus = 'active' | 'ending_reached' | 'finished';
+
 export interface SessionState {
   session_id: string;
   project_id: string;
+  status?: SessionStatus;
   current_scene_id: string;
   visited_scenes: string[];
   known_facts: string[];

@@ -103,6 +103,7 @@
         session={workspaceState.snapshot.payload.session}
         busy={workspaceState.busy}
         busyLabel={workspaceState.busyLabel}
+        on:finish={() => withWorkspace((controller) => controller.finish())}
         on:rewind={(event) => withWorkspace((controller) => controller.rewind(event.detail))}
       />
     {:else if layoutMode === 'desktop'}

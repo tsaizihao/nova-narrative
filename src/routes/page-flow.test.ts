@@ -602,6 +602,61 @@ describe('+page build flow', () => {
     expect(mocks.runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledWith('session-resume');
   });
 
+  it('does not label a finished session as resumable in the review shell', async () => {
+    const buildReady: BuildStatus = {
+      stage: 'ready',
+      message: 'Story package ready',
+      progress: 100
+    };
+    const importedProject = createProjectSnapshot({
+      build_status: {
+        stage: 'imported',
+        message: 'Novel imported',
+        progress: 20
+      }
+    });
+    const builtProject = createProjectSnapshot({
+      build_status: buildReady,
+      story_package: {
+        story_bible: {
+          title: '示例小说',
+          characters: [],
+          locations: [],
+          timeline: [],
+          world_rules: [],
+          relationships: [],
+          core_conflicts: []
+        },
+        world_model: {
+          character_cards: [],
+          worldbook_entries: [],
+          rules: []
+        },
+        start_scene_id: 'scene-1',
+        scenes: {}
+      }
+    });
+
+    mocks.projectBackend.createProject.mockResolvedValue(createProjectSnapshot());
+    mocks.projectBackend.importNovelText.mockResolvedValue(importedProject);
+    mocks.projectBackend.buildStoryPackage.mockResolvedValue(buildReady);
+    mocks.projectBackend.getProject.mockResolvedValue(builtProject);
+    mocks.runtimeBackend.findProjectSession.mockResolvedValue({
+      session_id: 'session-finished',
+      project_id: 'project-1',
+      status: 'finished'
+    });
+
+    render(Page);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '载入示例' }));
+    await fireEvent.click(screen.getByRole('button', { name: '开始解析与改编' }));
+    await screen.findByTestId('review-stage-shell');
+
+    expect(screen.getByRole('button', { name: '进入互动故事' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '继续互动故事' })).not.toBeInTheDocument();
+  });
+
   it('opens a persisted ready project from the import screen and enters review', async () => {
     const builtProject = createProjectSnapshot({
       build_status: {

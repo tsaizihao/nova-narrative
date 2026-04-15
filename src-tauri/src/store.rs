@@ -11,8 +11,8 @@ use crate::{
     compiler::compile_story_package,
     error::{AppError, AppResult},
     infra::{
-        AiSettingsRepository, PersistedAiSettings, ProjectRepository, RuntimeDataPaths,
-        SessionRepository,
+        AiSettingsRepository, DiagnosticsLevel, DiagnosticsRepository, PersistedAiSettings,
+        ProjectRepository, RuntimeDataPaths, SessionRepository, StorageManifestRepository,
     },
     importer::{sanitize_text, split_novel_into_chapters},
     models::{
@@ -20,7 +20,7 @@ use crate::{
         ProjectedOutcomePreview, ProjectedSceneChoicePreview, ReviewPreviewContext,
         ReviewPreviewExplanations, ReviewPreviewSnapshot, RuntimeSnapshot, SaveAiSettingsInput,
         SavedProjectActivityKind, SavedProjectLibraryEntry, SceneNode, ScenePayload, SessionState,
-        StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
+        SessionStatus, StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
     },
     provider::{
         ChatCompletionsTransport, HeuristicStoryProvider, KeyringSecretStore,
@@ -39,6 +39,7 @@ pub struct ProjectStore {
     project_repository: ProjectRepository,
     session_repository: SessionRepository,
     ai_settings_repository: AiSettingsRepository,
+    diagnostics_repository: DiagnosticsRepository,
     ai_settings: PersistedAiSettings,
     projects: HashMap<String, NovelProject>,
     sessions: HashMap<String, SessionState>,
@@ -63,8 +64,10 @@ impl ProjectStore {
         chat_transport: Arc<dyn ChatCompletionsTransport>,
     ) -> AppResult<Self> {
         let layout = RuntimeDataPaths::new(base_dir);
+        StorageManifestRepository::new(layout.clone())?.bootstrap()?;
         let project_repository = ProjectRepository::new(layout.clone())?;
         let session_repository = SessionRepository::new(layout.clone())?;
+        let diagnostics_repository = DiagnosticsRepository::new(layout.clone())?;
         let ai_settings_repository = AiSettingsRepository::new(layout)?;
         let ai_settings = ai_settings_repository.load_or_default()?;
 
@@ -75,6 +78,7 @@ impl ProjectStore {
             project_repository,
             session_repository,
             ai_settings_repository,
+            diagnostics_repository,
             ai_settings,
             projects: HashMap::new(),
             sessions: HashMap::new(),
@@ -139,6 +143,7 @@ impl ProjectStore {
         };
         self.persist_project(&project)?;
         self.projects.insert(project.id.clone(), project.clone());
+        self.log_info("create_project", "created project snapshot", Some(&project.id), None);
         Ok(project)
     }
 
@@ -180,10 +185,10 @@ impl ProjectStore {
                             .ending_report
                             .as_ref()
                             .map(|report| report.ending_type.clone());
-                        let activity_kind = if ending_type.is_some() {
-                            SavedProjectActivityKind::Ending
-                        } else {
+                        let activity_kind = if matches!(session.status, SessionStatus::Active) {
                             SavedProjectActivityKind::Session
+                        } else {
+                            SavedProjectActivityKind::Ending
                         };
 
                         (
@@ -220,9 +225,21 @@ impl ProjectStore {
     pub fn import_novel_text(&mut self, project_id: &str, content: &str) -> AppResult<NovelProject> {
         let sanitized = sanitize_text(content);
         if sanitized.is_empty() {
+            self.log_error(
+                "import_novel_text",
+                "rejected empty imported text",
+                Some(project_id),
+                None,
+            );
             return Err(AppError::Validation("Novel text cannot be empty".into()));
         }
         if !self.projects.contains_key(project_id) {
+            self.log_error(
+                "import_novel_text",
+                "project not found while importing text",
+                Some(project_id),
+                None,
+            );
             return Err(AppError::NotFound(project_id.to_string()));
         }
 
@@ -239,6 +256,12 @@ impl ProjectStore {
 
         let snapshot = project.clone();
         self.persist_project(&snapshot)?;
+        self.log_info(
+            "import_novel_text",
+            format!("imported {} chapters", snapshot.chapters.len()),
+            Some(&snapshot.id),
+            None,
+        );
         Ok(snapshot)
     }
 
@@ -251,11 +274,23 @@ impl ProjectStore {
         if !has_usable_imported_source(&project) {
             let error = AppError::InvalidState("project must contain imported source text before build".into());
             self.persist_failed_build(project, "构建无法开始", 0, &error)?;
+            self.log_error(
+                "build_story_package",
+                "build rejected because imported source is missing",
+                Some(project_id),
+                None,
+            );
             return Err(error);
         }
 
         project.build_status = build_status(BuildStage::Analyzing, "Analyzing source novel", 45, None);
         self.store_project_snapshot(project.clone())?;
+        self.log_info(
+            "build_story_package",
+            "entered analyzing stage",
+            Some(project_id),
+            None,
+        );
 
         let extracted = match settings.selected_provider {
             AiProviderKind::Heuristic => {
@@ -271,6 +306,12 @@ impl ProjectStore {
             Ok(extracted) => extracted,
             Err(error) => {
                 self.persist_failed_build(project, "结构解析失败", 45, &error)?;
+                self.log_error(
+                    "build_story_package",
+                    format!("analyze/provider stage failed: {}", command_error_message(&error)),
+                    Some(project_id),
+                    None,
+                );
                 return Err(error);
             }
         };
@@ -280,11 +321,23 @@ impl ProjectStore {
         project.rules = extracted.rules;
         project.build_status = build_status(BuildStage::Compiling, "Compiling scene graph", 80, None);
         self.store_project_snapshot(project.clone())?;
+        self.log_info(
+            "build_story_package",
+            "entered compiling stage",
+            Some(project_id),
+            None,
+        );
 
         let compiled = match validate_compiled_story_package(compile_story_package(&project, extracted.story_bible)) {
             Ok(package) => package,
             Err(error) => {
                 self.persist_failed_build(project, "互动编译失败", 80, &error)?;
+                self.log_error(
+                    "build_story_package",
+                    format!("compile stage failed: {}", command_error_message(&error)),
+                    Some(project_id),
+                    None,
+                );
                 return Err(error);
             }
         };
@@ -293,6 +346,12 @@ impl ProjectStore {
         project.build_status = build_status(BuildStage::Ready, "Story package ready", 100, None);
         let status = project.build_status.clone();
         self.store_project_snapshot(project)?;
+        self.log_info(
+            "build_story_package",
+            "build completed with ready story package",
+            Some(project_id),
+            None,
+        );
         Ok(status)
     }
 
@@ -339,6 +398,12 @@ impl ProjectStore {
         let session = RuntimeEngine::start_session(project_id, &package)?;
         self.persist_session(&session)?;
         self.sessions.insert(session.session_id.clone(), session.clone());
+        self.log_info(
+            "start_session",
+            format!("started runtime session at {}", session.current_scene_id),
+            Some(project_id),
+            Some(&session.session_id),
+        );
         Ok(session)
     }
 
@@ -353,7 +418,7 @@ impl ProjectStore {
             .filter(|session| session.project_id == project_id)
             .max_by_key(|session| {
                 (
-                    u8::from(session.ending_report.is_none()),
+                    session_status_rank(&session.status),
                     session.visited_scenes.len(),
                     session.major_choices.len(),
                     session.free_input_history.len(),
@@ -393,6 +458,12 @@ impl ProjectStore {
         let payload = RuntimeEngine::submit_choice(session, &package, choice_id)?;
         let snapshot = session.clone();
         self.persist_session(&snapshot)?;
+        self.log_info(
+            "submit_choice",
+            format!("advanced runtime choice {choice_id} to {}", snapshot.current_scene_id),
+            Some(&project_id),
+            Some(session_id),
+        );
         Ok(payload)
     }
 
@@ -409,6 +480,12 @@ impl ProjectStore {
         let payload = RuntimeEngine::submit_free_input(session, &package, text)?;
         let snapshot = session.clone();
         self.persist_session(&snapshot)?;
+        self.log_info(
+            "submit_free_input",
+            format!("recorded free input at {}", snapshot.current_scene_id),
+            Some(&project_id),
+            Some(session_id),
+        );
         Ok(payload)
     }
 
@@ -650,15 +727,54 @@ impl ProjectStore {
         let payload = RuntimeEngine::rewind_to_checkpoint(session, &package, checkpoint_id)?;
         let snapshot = session.clone();
         self.persist_session(&snapshot)?;
+        self.log_info(
+            "rewind_to_checkpoint",
+            format!("rewound runtime session to checkpoint {checkpoint_id}"),
+            Some(&project_id),
+            Some(session_id),
+        );
         Ok(payload)
     }
 
-    pub fn finish_session(&self, session_id: &str) -> AppResult<Option<crate::models::EndingReport>> {
-        let session = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| AppError::NotFound(session_id.to_string()))?;
-        Ok(session.ending_report.clone())
+    pub fn finish_session(&mut self, session_id: &str) -> AppResult<Option<crate::models::EndingReport>> {
+        let (project_id, ending_report, snapshot_to_persist) = {
+            let Some(session) = self.sessions.get_mut(session_id) else {
+                return Err(AppError::NotFound(session_id.to_string()));
+            };
+            let project_id = session.project_id.clone();
+            let ending_report = session.ending_report.clone();
+            let snapshot_to_persist = if ending_report.is_some() && session.status != SessionStatus::Finished {
+                session.status = SessionStatus::Finished;
+                Some(session.clone())
+            } else {
+                None
+            };
+
+            (project_id, ending_report, snapshot_to_persist)
+        };
+
+        if ending_report.is_none() {
+            self.log_info(
+                "finish_session",
+                "finish requested without an ending report",
+                Some(&project_id),
+                Some(session_id),
+            );
+            return Ok(None);
+        }
+
+        if let Some(snapshot) = snapshot_to_persist {
+            self.persist_session(&snapshot)?;
+        }
+
+        self.log_info(
+            "finish_session",
+            "archived ending session",
+            Some(&project_id),
+            Some(session_id),
+        );
+
+        Ok(ending_report)
     }
 
     fn persist_project(&self, project: &NovelProject) -> AppResult<()> {
@@ -671,6 +787,30 @@ impl ProjectStore {
 
     fn persist_ai_settings(&self) -> AppResult<()> {
         self.ai_settings_repository.save(&self.ai_settings)
+    }
+
+    fn log_info(
+        &self,
+        operation: &str,
+        detail: impl Into<String>,
+        project_id: Option<&str>,
+        session_id: Option<&str>,
+    ) {
+        let _ = self
+            .diagnostics_repository
+            .record(DiagnosticsLevel::Info, operation, detail, project_id, session_id);
+    }
+
+    fn log_error(
+        &self,
+        operation: &str,
+        detail: impl Into<String>,
+        project_id: Option<&str>,
+        session_id: Option<&str>,
+    ) {
+        let _ = self
+            .diagnostics_repository
+            .record(DiagnosticsLevel::Error, operation, detail, project_id, session_id);
     }
 
     fn store_project_snapshot(&mut self, project: NovelProject) -> AppResult<()> {
@@ -739,6 +879,16 @@ impl ProjectStore {
     fn load_from_disk(&mut self) -> AppResult<()> {
         self.projects = self.project_repository.load_all()?;
         self.sessions = self.session_repository.load_all()?;
+        self.log_info(
+            "load_from_disk",
+            format!(
+                "restored {} projects and {} sessions from disk",
+                self.projects.len(),
+                self.sessions.len()
+            ),
+            None,
+            None,
+        );
         Ok(())
     }
 }
@@ -771,6 +921,14 @@ fn sort_saved_project_entries(entries: &mut [SavedProjectLibraryEntry]) {
             .then_with(|| left.project.name.cmp(&right.project.name))
             .then_with(|| left.project.id.cmp(&right.project.id))
     });
+}
+
+fn session_status_rank(status: &SessionStatus) -> u8 {
+    match status {
+        SessionStatus::Active => 2,
+        SessionStatus::EndingReached => 1,
+        SessionStatus::Finished => 0,
+    }
 }
 
 fn build_status(
@@ -1024,6 +1182,10 @@ mod tests {
     use super::ProjectStore;
     use crate::{
         error::AppError,
+        infra::{
+            CURRENT_STORAGE_VERSION, DiagnosticsRepository, RuntimeDataPaths,
+            StorageManifestRepository,
+        },
         importer::split_novel_into_chapters,
         models::{
             AiProviderKind, BuildStage, ExternalProviderSettingsInput, ReviewPreviewContext,
@@ -1218,6 +1380,32 @@ mod tests {
     }
 
     #[test]
+    fn bootstraps_storage_manifest_and_records_diagnostics_events() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let runtime_dir = dir.path().to_path_buf();
+        let layout = RuntimeDataPaths::new(runtime_dir.clone());
+
+        let mut store = ProjectStore::new(runtime_dir).expect("store");
+        let manifest = StorageManifestRepository::new(layout.clone())
+            .expect("manifest repo")
+            .load()
+            .expect("load manifest")
+            .expect("manifest present");
+        assert_eq!(manifest.version, CURRENT_STORAGE_VERSION);
+
+        let project = store.create_project("临川夜话").expect("project");
+        let events = DiagnosticsRepository::new(layout)
+            .expect("diagnostics repo")
+            .load_all()
+            .expect("load diagnostics");
+
+        assert!(events.iter().any(|event| event.operation == "load_from_disk"));
+        assert!(events.iter().any(|event| {
+            event.operation == "create_project" && event.project_id.as_deref() == Some(project.id.as_str())
+        }));
+    }
+
+    #[test]
     fn split_into_chapters_preserves_titles_and_ignores_blank_lines() {
         let chapters = split_novel_into_chapters(&sample_novel());
 
@@ -1335,6 +1523,44 @@ mod tests {
             .rewind_to_checkpoint(&session.session_id, &checkpoint_id)
             .expect("rewind");
         assert_eq!(rewound.scene.id, reacted.session.available_checkpoints[0].checkpoint.scene_id);
+    }
+
+    #[test]
+    fn finish_session_marks_ended_sessions_as_finished_and_rewind_reopens_them() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+
+        let session = store.start_session(&project.id).expect("session");
+        advance_session_to_ending(&mut store, &session.session_id);
+        let ending = store
+            .get_current_scene(&session.session_id)
+            .expect("ending scene");
+
+        assert_eq!(ending.session.status, crate::models::SessionStatus::EndingReached);
+        assert!(ending.session.ending_report.is_some());
+
+        let archived = store.finish_session(&session.session_id).expect("finish session");
+        assert!(archived.is_some());
+        assert_eq!(
+            store.get_current_scene(&session.session_id)
+                .expect("finished scene")
+                .session
+                .status,
+            crate::models::SessionStatus::Finished
+        );
+
+        let checkpoint_id = ending.session.available_checkpoints[0].checkpoint.id.clone();
+        let rewound = store
+            .rewind_to_checkpoint(&session.session_id, &checkpoint_id)
+            .expect("rewind");
+        assert_eq!(rewound.session.status, crate::models::SessionStatus::Active);
+        assert!(rewound.session.ending_report.is_none());
     }
 
     #[test]

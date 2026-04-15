@@ -101,7 +101,8 @@ describe('runtime workspace', () => {
       getRuntimeSnapshot: vi.fn().mockResolvedValue(createSnapshot()),
       submitChoice: vi.fn(),
       submitFreeInput: vi.fn(),
-      rewindToCheckpoint: vi.fn()
+      rewindToCheckpoint: vi.fn(),
+      finishSession: vi.fn()
     };
 
     const controller = createRuntimeWorkspaceController('session-1', deps);
@@ -126,7 +127,8 @@ describe('runtime workspace', () => {
       getRuntimeSnapshot: vi.fn().mockResolvedValue(refreshed),
       submitChoice: vi.fn(),
       submitFreeInput: vi.fn().mockResolvedValue(undefined),
-      rewindToCheckpoint: vi.fn()
+      rewindToCheckpoint: vi.fn(),
+      finishSession: vi.fn()
     };
 
     const controller = createRuntimeWorkspaceController('session-1', deps);
@@ -146,7 +148,8 @@ describe('runtime workspace', () => {
       getRuntimeSnapshot: vi.fn().mockResolvedValue(createSnapshot()),
       submitChoice: vi.fn(),
       submitFreeInput: vi.fn(),
-      rewindToCheckpoint: vi.fn().mockReturnValue(pending.promise)
+      rewindToCheckpoint: vi.fn().mockReturnValue(pending.promise),
+      finishSession: vi.fn()
     };
 
     const controller = createRuntimeWorkspaceController('session-1', deps);
@@ -169,7 +172,8 @@ describe('runtime workspace', () => {
         .mockResolvedValueOnce(createSnapshot()),
       submitChoice: vi.fn(),
       submitFreeInput: vi.fn(),
-      rewindToCheckpoint: vi.fn()
+      rewindToCheckpoint: vi.fn(),
+      finishSession: vi.fn()
     };
 
     const controller = createRuntimeWorkspaceController('session-1', deps);
@@ -182,5 +186,51 @@ describe('runtime workspace', () => {
     expect(get(controller).status).toBe('ready');
     expect(get(controller).error).toBe('');
     expect(get(controller).snapshot?.payload.scene.title).toBe('北门之夜');
+  });
+
+  it('finishes an ended session and refreshes the unified runtime snapshot', async () => {
+    const base = createSnapshot();
+    const endingSnapshot = createSnapshot({
+      payload: {
+        ...base.payload,
+        session: {
+          ...base.payload.session,
+          status: 'ending_reached',
+          ending_report: {
+            ending_type: '守门者结局',
+            summary: '他留在门前。',
+            decisive_turns: ['在午夜关上了门'],
+            unresolved_threads: ['门后的真相']
+          }
+        }
+      }
+    });
+    const finishedSnapshot = createSnapshot({
+      payload: {
+        ...endingSnapshot.payload,
+        session: {
+          ...endingSnapshot.payload.session,
+          status: 'finished'
+        }
+      }
+    });
+    const deps = {
+      getRuntimeSnapshot: vi
+        .fn()
+        .mockResolvedValueOnce(endingSnapshot)
+        .mockResolvedValueOnce(finishedSnapshot),
+      submitChoice: vi.fn(),
+      submitFreeInput: vi.fn(),
+      rewindToCheckpoint: vi.fn(),
+      finishSession: vi.fn().mockResolvedValue(endingSnapshot.payload.session.ending_report)
+    };
+
+    const controller = createRuntimeWorkspaceController('session-1', deps as any);
+    await controller.load();
+    await (controller as any).finish();
+
+    expect(deps.finishSession).toHaveBeenCalledWith('session-1');
+    expect(deps.getRuntimeSnapshot).toHaveBeenCalledTimes(2);
+    expect(get(controller).snapshot?.payload.session.status).toBe('finished');
   });
 });

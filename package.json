@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "svelte-kit sync && vitest run",
+    "verify:frontend": "pnpm test && pnpm check",
+    "verify:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "verify": "pnpm verify:frontend && pnpm verify:rust",
     "tauri": "tauri",
     "icon:macos": "bash ./scripts/build-macos-icon.sh"
   },

@@ -13,6 +13,7 @@ impl RuntimeDataPaths {
     }
 
     pub fn ensure_layout(&self) -> AppResult<()> {
+        fs::create_dir_all(&self.base_dir)?;
         fs::create_dir_all(self.projects_dir())?;
         fs::create_dir_all(self.sessions_dir())?;
         Ok(())
@@ -28,6 +29,14 @@ impl RuntimeDataPaths {
 
     pub fn ai_settings_path(&self) -> PathBuf {
         self.base_dir.join("ai-settings.json")
+    }
+
+    pub fn storage_manifest_path(&self) -> PathBuf {
+        self.base_dir.join("storage-manifest.json")
+    }
+
+    pub fn diagnostics_path(&self) -> PathBuf {
+        self.base_dir.join("diagnostics.log")
     }
 
     pub fn project_path(&self, id: &str) -> PathBuf {
@@ -54,6 +63,14 @@ mod tests {
         assert_eq!(
             layout.ai_settings_path(),
             PathBuf::from("/tmp/nova-runtime/ai-settings.json")
+        );
+        assert_eq!(
+            layout.storage_manifest_path(),
+            PathBuf::from("/tmp/nova-runtime/storage-manifest.json")
+        );
+        assert_eq!(
+            layout.diagnostics_path(),
+            PathBuf::from("/tmp/nova-runtime/diagnostics.log")
         );
         assert_eq!(
             layout.project_path("project-1"),

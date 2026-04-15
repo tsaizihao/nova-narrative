@@ -7,7 +7,7 @@ use crate::{
     error::{AppError, AppResult},
     models::{
         CharacterCard, CheckpointMarker, CheckpointSnapshot, ChoiceOption, SceneNode, ScenePayload,
-        SessionState, StoryPackage,
+        SessionState, SessionStatus, StoryPackage,
     },
     rules::{ActiveRuleHit, RuleDefinition, RuleEffect, RuleOperator},
     state::{CharacterRuntimeState, FactRecord, LoreLifecycleRecord, StoryState},
@@ -43,6 +43,7 @@ impl RuntimeEngine {
         let mut session = SessionState {
             session_id: format!("session-{project_id}"),
             project_id: project_id.to_string(),
+            status: SessionStatus::Active,
             current_scene_id: start_scene.id.clone(),
             visited_scenes: vec![start_scene.id.clone()],
             story_state: seed_story_state(start_scene, package),
@@ -132,10 +133,13 @@ impl RuntimeEngine {
 
         if let Some(ending) = next_scene.ending.clone() {
             session.ending_report = Some(ending);
+            session.status = SessionStatus::EndingReached;
             session.story_state.ending_report = session
                 .ending_report
                 .as_ref()
                 .map(|ending| ending.summary.clone());
+        } else {
+            session.status = SessionStatus::Active;
         }
 
         capture_checkpoint(session, &next_scene);
@@ -224,6 +228,7 @@ impl RuntimeEngine {
         session.relationship_deltas = snapshot.relationship_deltas.clone();
         session.rule_flags = snapshot.rule_flags.clone();
         session.major_choices = snapshot.major_choices.clone();
+        session.status = SessionStatus::Active;
         session.ending_report = None;
         session.story_state = snapshot.story_state.clone();
         session.lore_lifecycle = snapshot.lore_lifecycle.clone();

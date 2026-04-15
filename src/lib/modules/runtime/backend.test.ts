@@ -53,4 +53,18 @@ describe('runtime backend', () => {
       projectId: 'project-1'
     });
   });
+
+  it('finishes an ended session through the shared command client', async () => {
+    const { finishSession } = await import('./backend');
+
+    invokeCommand.mockResolvedValueOnce({
+      ending_type: '守门者结局'
+    });
+
+    await finishSession('session-1');
+
+    expect(invokeCommand).toHaveBeenCalledWith('finish_session', {
+      sessionId: 'session-1'
+    });
+  });
 });

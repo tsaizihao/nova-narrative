@@ -10,7 +10,7 @@ Use this document when the question is:
 - what interfaces are expected to change
 - what tests must exist before we claim completion
 
-For architecture rules, use [docs/architecture-guide.md](/Users/caizihao/github/tsaizihao/nova-narrative/.worktrees/codex-v1-architecture-foundation/docs/architecture-guide.md). For system semantics, use [docs/system-specification.md](/Users/caizihao/github/tsaizihao/nova-narrative/.worktrees/codex-v1-architecture-foundation/docs/system-specification.md).
+For architecture rules, use [docs/architecture-guide.md](./architecture-guide.md). For system semantics, use [docs/system-specification.md](./system-specification.md).
 
 ## Roadmap Principles
 
@@ -23,14 +23,14 @@ For architecture rules, use [docs/architecture-guide.md](/Users/caizihao/github/
 
 | Phase | Goal | Current Status |
 |---|---|---|
-| 0 | Establish one trusted documentation entrypoint | In progress in this change |
-| 1 | Replace monolithic frontend/backend entrypoints with domain boundaries | Implemented in this change |
-| 2 | Introduce Rust `commands + app_api + application` skeleton | Implemented as first skeleton in this change |
-| 3 | Harden import/extract/compile behavior | Pending |
-| 4 | Upgrade review workspace into a stable authoring surface | Pending |
-| 5 | Stabilize runtime and reader behavior for v1 | Pending |
-| 6 | Add storage migration and diagnostics foundations | Pending |
-| 7 | Align docs/tests/commands into a releasable v1 baseline | Pending |
+| 0 | Establish one trusted documentation entrypoint | Implemented |
+| 1 | Replace monolithic frontend/backend entrypoints with domain boundaries | Implemented |
+| 2 | Introduce Rust `commands + app_api + application` skeleton | Implemented |
+| 3 | Harden import/extract/compile behavior | Implemented |
+| 4 | Upgrade review workspace into a stable authoring surface | Implemented |
+| 5 | Stabilize runtime and reader behavior for v1 | Implemented |
+| 6 | Add storage migration and diagnostics foundations | Implemented |
+| 7 | Align docs/tests/commands into a releasable v1 baseline | Implemented |
 
 ## Detailed Phases
 
@@ -162,6 +162,12 @@ Done when:
 - runtime state transitions are covered in Rust and UI tests
 - desktop and mobile readers share one data contract
 
+Implemented baseline:
+- runtime snapshot is the single reader data source
+- session lifecycle now distinguishes `active`, `ending_reached`, and `finished`
+- ending flow supports explicit finish and checkpoint rewind reopening
+- review shell only marks truly active sessions as resumable
+
 ### Phase 6: Storage, Migration, Diagnostics
 
 Goal:
@@ -180,6 +186,11 @@ Done when:
 - project/session data has a documented compatibility path
 - failures can be localized by layer
 
+Implemented baseline:
+- runtime storage now bootstraps `storage-manifest.json`
+- migration hook exists for manifest version upgrades
+- diagnostics append to `diagnostics.log` for major store operations and failures
+
 ### Phase 7: v1 Release Baseline
 
 Goal:
@@ -197,6 +208,11 @@ Work:
 Done when:
 - repo docs and code boundaries tell the same story
 - new contributors can run, test, and extend the core loop confidently
+
+Implemented baseline:
+- `README.md`, architecture guide, roadmap, and system spec entry links are aligned
+- repo-level verification is standardized through `pnpm verify`
+- the current single-repo `v1` baseline is explicit, while workspace migration remains a later decision
 
 ## Public Interface Adjustments
 

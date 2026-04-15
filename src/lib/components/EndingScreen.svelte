@@ -8,7 +8,7 @@
   export let busy = false;
   export let busyLabel = '';
 
-  const dispatch = createEventDispatcher<{ rewind: string }>();
+  const dispatch = createEventDispatcher<{ rewind: string; finish: void }>();
 </script>
 
 <section class="ending" data-tone="paper">
@@ -40,6 +40,13 @@
   <div class="rewind">
     <strong>从关键节点重写命运</strong>
     <p class="rewind-copy">你可以带着刚刚得到的结局理解，回到任一关键节点重写命运。</p>
+    {#if session.status === 'finished'}
+      <p class="archive-copy">本轮互动已归档</p>
+    {:else}
+      <button type="button" class="finish-button" on:click={() => dispatch('finish')} disabled={busy}>
+        完成本轮互动
+      </button>
+    {/if}
     {#if busy && busyLabel}
       <p class="rewind-status">{busyLabel}</p>
     {/if}
@@ -142,16 +149,23 @@
   }
 
   .rewind-copy,
+  .archive-copy,
   .rewind-status {
     margin: 0 0 12px;
     line-height: 1.7;
     color: var(--reader-body);
   }
 
+  .archive-copy {
+    color: var(--reader-accent);
+    font-weight: 600;
+  }
+
   .rewind-status {
     color: var(--reader-accent);
   }
 
+  .finish-button,
   .rewind-buttons button {
     border: 1px solid var(--reader-border);
     border-radius: 999px;
@@ -162,11 +176,19 @@
     cursor: pointer;
   }
 
+  .finish-button {
+    margin-bottom: 12px;
+    background: rgba(31, 106, 87, 0.08);
+    color: var(--reader-accent);
+  }
+
+  .finish-button:disabled,
   .rewind-buttons button:disabled {
     cursor: wait;
     opacity: 0.7;
   }
 
+  .finish-button:hover,
   .rewind-buttons button:hover {
     border-color: rgba(31, 106, 87, 0.24);
     background: var(--reader-accent-soft);

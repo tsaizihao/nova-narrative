@@ -5,7 +5,8 @@ const runtimeBackend = vi.hoisted(() => ({
   getRuntimeSnapshot: vi.fn(),
   submitChoice: vi.fn(),
   submitFreeInput: vi.fn(),
-  rewindToCheckpoint: vi.fn()
+  rewindToCheckpoint: vi.fn(),
+  finishSession: vi.fn()
 }));
 
 vi.mock('$lib/modules/runtime/backend', () => runtimeBackend);
@@ -110,6 +111,7 @@ describe('RuntimeStageShell', () => {
     runtimeBackend.submitChoice.mockReset();
     runtimeBackend.submitFreeInput.mockReset();
     runtimeBackend.rewindToCheckpoint.mockReset();
+    runtimeBackend.finishSession.mockReset();
   });
 
   it('loads a runtime snapshot and renders the desktop reader shell', async () => {
@@ -220,5 +222,49 @@ describe('RuntimeStageShell', () => {
 
     expect(exitReader).toHaveBeenCalledTimes(1);
     expect(runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishes an ending session and keeps the ending screen in an archived state', async () => {
+    const endingSnapshot = createSnapshot({
+      payload: {
+        ...createSnapshot().payload,
+        session: {
+          ...createSnapshot().payload.session,
+          status: 'ending_reached',
+          ending_report: {
+            ending_type: '守门者结局',
+            summary: '他留在门前。',
+            decisive_turns: ['在午夜关上了门'],
+            unresolved_threads: ['门后的真相']
+          }
+        }
+      }
+    });
+    const finishedSnapshot = createSnapshot({
+      payload: {
+        ...endingSnapshot.payload,
+        session: {
+          ...endingSnapshot.payload.session,
+          status: 'finished'
+        }
+      }
+    });
+    runtimeBackend.getRuntimeSnapshot
+      .mockResolvedValueOnce(endingSnapshot)
+      .mockResolvedValueOnce(finishedSnapshot);
+    runtimeBackend.finishSession.mockResolvedValue(endingSnapshot.payload.session.ending_report);
+
+    render(RuntimeStageShell, {
+      props: {
+        sessionId: 'session-1',
+        layoutMode: 'desktop'
+      }
+    });
+
+    await screen.findByRole('heading', { name: '守门者结局' });
+    await fireEvent.click(screen.getByRole('button', { name: '完成本轮互动' }));
+
+    expect(runtimeBackend.finishSession).toHaveBeenCalledWith('session-1');
+    await screen.findByText('本轮互动已归档');
   });
 });

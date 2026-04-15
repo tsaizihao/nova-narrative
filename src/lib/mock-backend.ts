@@ -21,6 +21,7 @@ import type {
   SaveAiSettingsInput,
   SceneNode,
   ScenePayload,
+  SessionStatus,
   SessionState,
   StoryBible,
   StoryCodex,
@@ -126,6 +127,21 @@ function hasUsableImportedSource(project: NovelProject) {
   return Boolean(project.raw_text.trim() && project.chapters.length > 0);
 }
 
+function resolveSessionStatus(status?: SessionStatus | null): SessionStatus {
+  return status ?? 'active';
+}
+
+function sessionStatusRank(status: SessionStatus) {
+  switch (status) {
+    case 'active':
+      return 2;
+    case 'ending_reached':
+      return 1;
+    case 'finished':
+      return 0;
+  }
+}
+
 function failProjectBuild(project: NovelProject, message: string, progress: number, error: string) {
   const failed: NovelProject = {
     ...project,
@@ -154,6 +170,13 @@ function getLatestProjectSession(projectId: string) {
   return Array.from(sessions.values())
     .filter((session) => session.project_id === projectId)
     .sort((left, right) => {
+      const statusOrder =
+        sessionStatusRank(resolveSessionStatus(right.status)) -
+        sessionStatusRank(resolveSessionStatus(left.status));
+      if (statusOrder !== 0) {
+        return statusOrder;
+      }
+
       const activityOrder =
         (sessionActivityAt.get(right.session_id) ?? 0) - (sessionActivityAt.get(left.session_id) ?? 0);
       if (activityOrder !== 0) {
@@ -1082,7 +1105,7 @@ export const mockBackend = {
     return clone(
       Array.from(projects.values())
         .filter((project) => project.build_status.stage === 'ready' && Boolean(project.story_package))
-        .map((project) => {
+    .map((project) => {
           const session = getLatestProjectSession(project.id);
           const sessionId = session?.session_id ?? null;
           const sceneTitle =
@@ -1098,7 +1121,12 @@ export const mockBackend = {
             last_activity_at: sessionId
               ? (sessionActivityAt.get(sessionId) ?? projectActivityAt.get(project.id) ?? 0)
               : (projectActivityAt.get(project.id) ?? 0),
-            last_activity_kind: session?.ending_report ? 'ending' : sessionId ? 'session' : 'project'
+            last_activity_kind:
+              sessionId == null
+                ? 'project'
+                : resolveSessionStatus(session?.status) === 'active'
+                  ? 'session'
+                  : 'ending'
           } satisfies SavedProjectLibraryEntry;
         })
         .sort((left, right) => {
@@ -1242,6 +1270,7 @@ export const mockBackend = {
     let session: SessionState = {
       session_id: nextId('session'),
       project_id: projectId,
+      status: 'active',
       current_scene_id: storyPackage.start_scene_id,
       visited_scenes: [storyPackage.start_scene_id],
       known_facts: [],
@@ -1323,13 +1352,15 @@ export const mockBackend = {
       major_choices: [
         ...session.major_choices,
         evaluation.blocked ? `尝试：${choice.label}（被规则阻止）` : choice.label
-      ]
+      ],
+      status: 'active'
     };
 
     const nextScene = storyPackage.scenes[nextSession.current_scene_id];
     if (nextScene.ending) {
       nextSession = {
         ...nextSession,
+        status: 'ending_reached',
         ending_report: nextScene.ending,
         story_state: {
           ...nextSession.story_state,
@@ -1549,6 +1580,7 @@ export const mockBackend = {
       relationship_deltas: { ...checkpoint.relationship_deltas },
       rule_flags: [...checkpoint.rule_flags],
       major_choices: [...checkpoint.major_choices],
+      status: 'active',
       ending_report: null,
       story_state: clone(checkpoint.story_state),
       lore_lifecycle: clone(checkpoint.lore_lifecycle),
@@ -1562,6 +1594,16 @@ export const mockBackend = {
   async finish_session(sessionId: string) {
     const session = sessions.get(sessionId);
     if (!session) throw new Error('session not found');
-    return clone(session.ending_report ?? null);
+    if (!session.ending_report) {
+      return null;
+    }
+
+    const archived = {
+      ...session,
+      status: 'finished' as SessionStatus
+    };
+    sessions.set(sessionId, archived);
+    touchSession(sessionId);
+    return clone(archived.ending_report);
   }
 };

@@ -1,32 +1,53 @@
 # 叙世者
 
-> “叙述世界的人”——你就是这个世界的主宰，AI帮你搭台。
+> “叙述世界的人”——你就是这个世界的主宰，AI 帮你搭台。
 
-`叙世者` 是一个仍在构思和搭建中的小说互动化工具。它想做两件事：
-
-- 帮创作者把小说整理成可游玩的互动故事
-- 帮读者进入这个故事并直接游玩
+`叙世者` 是一个本地优先的 `Svelte + Tauri + Rust` 桌面应用，用来把中文小说整理成可审阅、可修订、可游玩的互动故事。
 
 ## 当前状态
 
-本项目仍处于非常早期的开发阶段，**目前不可用**。
+当前仓库已经具备 `v1` 本地闭环基线：
 
-这意味着：
+- 支持 `导入 -> 提炼 -> 编译 -> 审阅 -> 游玩`
+- 支持 review workspace、聚合预览、reader runtime snapshot
+- 支持 session 的 `active -> ending_reached -> finished` 生命周期
+- 支持本地存储清单、基础迁移入口和 diagnostics 日志
 
-- 没有可供普通用户使用的正式版本
-- 功能、交互和数据结构都还可能持续变化
-- 仓库中的实现主要用于探索产品方向和验证技术方案
+它仍然是快速迭代中的桌面应用，不包含账号、云同步、插件生态、多格式导入或资产工作流。
 
-如果你现在看到这个仓库，请把它理解为一个开发中的原型，而不是已经完成的应用。
+## 快速开始
 
-## 说明
+```bash
+pnpm install
+pnpm tauri dev
+```
 
-- 当前仓库重点在验证“小说导入 -> 结构化提炼 -> 审阅 -> 互动游玩”的整体链路
-- 现阶段不承诺兼容性、稳定性或可持续的数据格式
-- 在 README、界面或分支结构发生变化时，都属于正常的早期开发行为
+如果只想验证代码基线，运行：
 
-## 系统 Specification
+```bash
+pnpm verify
+```
 
-如果你想了解这个系统的目标产品定义、逻辑架构、模块边界、数据对象、命令接口和当前原型差距，请阅读系统级 specification：
+这会依次执行：
 
-- [docs/system-specification.md](docs/system-specification.md)
+- `pnpm test`
+- `pnpm check`
+- `cargo test --manifest-path src-tauri/Cargo.toml`
+
+## 运行时数据
+
+应用运行时数据保存在本地 runtime 目录，当前约定包括：
+
+- `projects/*.json`
+- `sessions/*.json`
+- `ai-settings.json`
+- `storage-manifest.json`
+- `diagnostics.log`
+
+其中 provider 密钥仍保存在 secret store，不写入 `ai-settings.json`。
+
+## 文档入口
+
+- 架构主入口：[docs/architecture-guide.md](docs/architecture-guide.md)
+- 实施路线主入口：[docs/implementation-roadmap-v1.md](docs/implementation-roadmap-v1.md)
+- 系统语义与术语参考：[docs/system-specification.md](docs/system-specification.md)

@@ -11,7 +11,7 @@ Read this document first when the question is about:
 - what we borrow from `../aink`
 - what we intentionally do not borrow
 
-For product semantics and domain language, keep using [docs/system-specification.md](/Users/caizihao/github/tsaizihao/nova-narrative/.worktrees/codex-v1-architecture-foundation/docs/system-specification.md). For execution order and milestones, use [docs/implementation-roadmap-v1.md](/Users/caizihao/github/tsaizihao/nova-narrative/.worktrees/codex-v1-architecture-foundation/docs/implementation-roadmap-v1.md).
+For product semantics and domain language, keep using [docs/system-specification.md](./system-specification.md). For execution order and milestones, use [docs/implementation-roadmap-v1.md](./implementation-roadmap-v1.md).
 
 ## Product Spine And v1 Scope
 
@@ -34,11 +34,10 @@ For product semantics and domain language, keep using [docs/system-specification
 - The frontend already has distinct import, build, review, and reader surfaces.
 - The test baseline is healthy for both Vitest and Rust unit tests.
 
-### Current prototype weaknesses
+### Current baseline limits
 
 - `src/routes/+page.svelte` still orchestrates too much product flow.
-- `src-tauri/src/lib.rs` was previously both the command registry and command implementation host.
-- `src-tauri/src/store.rs` still combines persistence, orchestration, provider switching, and runtime entrypoints.
+- `src-tauri/src/store.rs` still combines orchestration, provider switching, runtime entrypoints, and part of the persistence policy.
 - Public-facing types are too close to storage/runtime internals.
 
 ### Target state
@@ -196,8 +195,17 @@ Target future home for:
 - JSON/JSONL helpers
 - provider transport adapters
 
+Current shape:
+- `src-tauri/src/infra/project_repository.rs`
+- `src-tauri/src/infra/session_repository.rs`
+- `src-tauri/src/infra/ai_settings_repository.rs`
+- `src-tauri/src/infra/storage_manifest_repository.rs`
+- `src-tauri/src/infra/diagnostics_repository.rs`
+- `src-tauri/src/infra/path_layout.rs`
+
 Current note:
-- we have not yet split an `infra/` directory in-repo, but the next extraction target is out of `store.rs`
+- `ProjectStore` still assembles these repositories and owns the higher-level use cases
+- disk layout remains `projects/*.json`, `sessions/*.json`, `ai-settings.json`, plus additive `storage-manifest.json` and `diagnostics.log`
 
 ## Storage Model And Runtime Model Boundaries
 

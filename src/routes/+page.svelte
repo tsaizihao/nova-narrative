@@ -19,6 +19,7 @@
     BuildStatus,
     NovelProject,
     SaveAiSettingsInput,
+    SessionStatus,
   } from '$lib/types';
 
   type Phase = 'import' | 'building' | 'review' | 'reader';
@@ -38,6 +39,7 @@
   };
   let activeSessionId: string | null = null;
   let resumableSessionId: string | null = null;
+  let resumableSessionStatus: SessionStatus | null = null;
   let error = '';
   let busy = false;
   let settingsBusy = false;
@@ -69,6 +71,17 @@
   };
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
+
+  function normalizeSessionStatus(status?: SessionStatus | null): SessionStatus {
+    return status ?? 'active';
+  }
+
+  function syncProjectSessionState(
+    session: { session_id: string; status?: SessionStatus | null } | null | undefined
+  ) {
+    resumableSessionId = session?.session_id ?? null;
+    resumableSessionStatus = session ? normalizeSessionStatus(session.status) : null;
+  }
 
   function syncAiDraft(snapshot: AppAiSettingsSnapshot) {
     aiDraft = {
@@ -164,7 +177,7 @@
     busy = true;
     error = '';
     activeSessionId = null;
-    resumableSessionId = null;
+    syncProjectSessionState(null);
     let importedProject: NovelProject | null = null;
 
     try {
@@ -177,8 +190,7 @@
 
       buildStatus = await projectBackend.buildStoryPackage(project.id);
       project = await projectBackend.getProject(project.id);
-      resumableSessionId =
-        (await runtimeBackend.findProjectSession(project.id).catch(() => null))?.session_id ?? null;
+      syncProjectSessionState(await runtimeBackend.findProjectSession(project.id).catch(() => null));
       error = '';
       phase = 'review';
     } catch (caught) {
@@ -215,6 +227,12 @@
     try {
       project = selectedProject.project;
       resumableSessionId = selectedProject.sessionId;
+      resumableSessionStatus =
+        selectedProject.sessionId == null
+          ? null
+          : selectedProject.activityKind === 'session'
+            ? 'active'
+            : 'finished';
 
       if (selectedProject.sessionId) {
         activeSessionId = selectedProject.sessionId;
@@ -253,7 +271,7 @@
       .findProjectSession(project.id)
       .catch(() => null);
     if (resumableSession) {
-      resumableSessionId = resumableSession.session_id;
+      syncProjectSessionState(resumableSession);
       activeSessionId = resumableSession.session_id;
       error = '';
       phase = 'reader';
@@ -266,7 +284,7 @@
     try {
       const session = await runtimeBackend.startSession(project.id);
       activeSessionId = session.session_id;
-      resumableSessionId = session.session_id;
+      syncProjectSessionState(session);
       phase = 'reader';
     } catch (caught) {
       error = caught instanceof Error ? caught.message : '启动阅读器失败';
@@ -281,11 +299,25 @@
     error = '';
   }
 
-  function returnToReview() {
+  async function returnToReview() {
     error = '';
-    if (activeSessionId) {
-      resumableSessionId = activeSessionId;
+    const previousSessionId = activeSessionId;
+    activeSessionId = null;
+
+    if (project) {
+      const latestSession = await runtimeBackend.findProjectSession(project.id).catch(() => null);
+      if (latestSession) {
+        syncProjectSessionState(latestSession);
+      } else if (previousSessionId) {
+        syncProjectSessionState({
+          session_id: previousSessionId,
+          status: 'active'
+        });
+      } else {
+        syncProjectSessionState(null);
+      }
     }
+
     phase = 'review';
   }
 
@@ -357,7 +389,7 @@
       <ReviewStageShell
         {project}
         {busy}
-        hasActiveSession={Boolean(activeSessionId || resumableSessionId)}
+        hasActiveSession={resumableSessionStatus === 'active'}
         enterStoryError={error}
         on:enterStory={enterStory}
       />

@@ -20,6 +20,7 @@ export interface RuntimeWorkspaceBackend {
   submitChoice(sessionId: string, choiceId: string): Promise<unknown>;
   submitFreeInput(sessionId: string, text: string): Promise<unknown>;
   rewindToCheckpoint(sessionId: string, checkpointId: string): Promise<unknown>;
+  finishSession(sessionId: string): Promise<unknown>;
 }
 
 export interface RuntimeWorkspaceController extends Readable<RuntimeWorkspaceState> {
@@ -28,6 +29,7 @@ export interface RuntimeWorkspaceController extends Readable<RuntimeWorkspaceSta
   choose(choiceId: string): Promise<void>;
   submitFreeInput(): Promise<void>;
   rewind(checkpointId: string): Promise<void>;
+  finish(): Promise<void>;
 }
 
 function normalizeError(error: unknown, fallback: string): string {
@@ -152,6 +154,13 @@ export function createRuntimeWorkspaceController(
       await runAction(() => deps.rewindToCheckpoint(sessionId, checkpointId), {
         fallbackMessage: '回溯失败',
         busyLabel: '正在回溯到关键节点'
+      });
+    },
+
+    async finish() {
+      await runAction(() => deps.finishSession(sessionId), {
+        fallbackMessage: '完成本轮互动失败',
+        busyLabel: '正在归档本轮互动'
       });
     }
   };
