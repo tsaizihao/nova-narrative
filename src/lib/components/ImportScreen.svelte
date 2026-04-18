@@ -127,237 +127,244 @@
     busy || !projectName.trim() || !novelText.trim() || externalProviderIncomplete;
 </script>
 
-<section class="workspace-hero">
-  <div class="support-rail">
-    <div class="copy">
-      <p class="eyebrow">Import</p>
-      <h1>先导入小说，再让系统开始改编</h1>
-      <p class="lede">
-        把纯文本贴进来，下一步就是解析人物、世界、规则和可互动场景。
-      </p>
-      <p class="support-copy">
-        审阅阶段还能继续校正角色、世界书和规则，然后再进入互动试玩。
-      </p>
-    </div>
-
-    <section class="support-panel">
-      <div>
-        <p class="label">导入提示</p>
-        <h3>优先粘贴完整章节正文</h3>
+<section class="import-layout">
+  <div class="workspace-hero">
+    <div class="support-rail">
+      <div class="copy">
+        <p class="eyebrow">Import</p>
+        <h1>先导入小说，再让系统开始改编</h1>
+        <p class="lede">
+          把纯文本贴进来，下一步就是解析人物、世界、规则和可互动场景。
+        </p>
+        <p class="support-copy">
+          审阅阶段还能继续校正角色、世界书和规则，然后再进入互动试玩。
+        </p>
       </div>
 
-      <div class="support-list">
-        <article>
-          <strong>保留章节标题与空行</strong>
-          <p>这样更容易切分结构，也更利于后续生成起始场景。</p>
-        </article>
-        <article>
-          <strong>优先粘贴完整章节正文</strong>
-          <p>不要只贴设定摘要，正文里的行动和关系变化才是互动化的基础。</p>
-        </article>
-        <article>
-          <strong>这一步会产出</strong>
-          <p>角色卡、世界书和规则草案会在审阅阶段继续校正，不需要一次写完。</p>
-        </article>
-      </div>
-
-      <div class="outcome-grid">
+      <section class="support-panel">
         <div>
-          <span>角色卡</span>
-          <strong>人物与动机</strong>
-        </div>
-        <div>
-          <span>世界书</span>
-          <strong>地点与设定</strong>
-        </div>
-        <div>
-          <span>规则</span>
-          <strong>约束与后果</strong>
-        </div>
-      </div>
-    </section>
-
-    {#if resumableProjects.length > 0}
-      <section class="resume-panel">
-        <div>
-          <p class="label">继续已有项目</p>
-          <h3>从上次构建好的故事继续</h3>
+          <p class="label">导入提示</p>
+          <h3>优先粘贴完整章节正文</h3>
         </div>
 
-        <div class="resume-list">
-          {#each resumableProjects as resumableProject (resumableProject.project.id)}
-            <article class="resume-item">
-              <div>
-                <strong>{resumableProject.project.name}</strong>
-                <p>{resumableProject.activityLabel}</p>
-                <p class="activity-time">
-                  <span class="activity-meta">
-                    {resumableProject.activityMetaLabel ??
-                      (resumableProject.sessionId ? '最近游玩' : '最近导入')}
-                  </span>
-                  <span>{resumableProject.activityTimeLabel}</span>
-                </p>
-              </div>
-              <button
-                type="button"
-                class="ghost"
-                on:click={() => dispatch('openProject', resumableProject.project.id)}
-                disabled={busy}
-              >
-                {resumableProject.ctaLabel}
-              </button>
-            </article>
-          {/each}
+        <div class="support-list">
+          <article>
+            <strong>保留章节标题与空行</strong>
+            <p>这样更容易切分结构，也更利于后续生成起始场景。</p>
+          </article>
+          <article>
+            <strong>优先粘贴完整章节正文</strong>
+            <p>不要只贴设定摘要，正文里的行动和关系变化才是互动化的基础。</p>
+          </article>
+          <article>
+            <strong>这一步会产出</strong>
+            <p>角色卡、世界书和规则草案会在审阅阶段继续校正，不需要一次写完。</p>
+          </article>
+        </div>
+
+        <div class="outcome-grid">
+          <div>
+            <span>角色卡</span>
+            <strong>人物与动机</strong>
+          </div>
+          <div>
+            <span>世界书</span>
+            <strong>地点与设定</strong>
+          </div>
+          <div>
+            <span>规则</span>
+            <strong>约束与后果</strong>
+          </div>
         </div>
       </section>
-    {/if}
-  </div>
-
-  <div class="composer">
-    <div class="section-head">
-      <div>
-        <p class="label">新项目</p>
-        <h2>导入小说文本</h2>
-      </div>
-      <div class="head-actions">
-        <label class="ghost file-trigger">
-          <input type="file" accept=".txt,text/plain" on:change={handleFileSelection} disabled={busy} />
-          <span>导入 .txt</span>
-        </label>
-        <button type="button" class="ghost" on:click={() => dispatch('sample')} disabled={busy}>
-          载入示例
-        </button>
-      </div>
     </div>
 
-    <p class="file-help">支持中文纯文本 `.txt`，读取成功后会直接填入下方文本框。</p>
-
-    <label>
-      <span>项目名称</span>
-      <input
-        value={projectName}
-        on:input={(event) => dispatch('updateProjectName', event.currentTarget.value)}
-        placeholder="例如：临川夜话"
-        disabled={busy}
-      />
-    </label>
-
-    <label>
-      <span>小说正文</span>
-      <textarea
-        bind:this={novelTextarea}
-        value={novelText}
-        on:input={handleNovelTextInput}
-        style:overflow-y="hidden"
-        placeholder="粘贴 txt 或 markdown 纯文本内容"
-        disabled={busy}
-      ></textarea>
-    </label>
-
-    <section class="provider-panel">
-      <div class="provider-head">
+    <div class="composer">
+      <div class="section-head">
         <div>
-          <p class="label">AI Provider</p>
-          <h3>接口设置</h3>
+          <p class="label">新项目</p>
+          <h2>导入小说文本</h2>
         </div>
-        {#if selectedProvider !== 'heuristic'}
-          <span class:ready={activeSnapshot.has_api_key} class="status-pill">
-            {activeSnapshot.has_api_key ? '已保存 API key' : '未保存 API key'}
-          </span>
-        {/if}
+        <div class="head-actions">
+          <label class="ghost file-trigger">
+            <input type="file" accept=".txt,text/plain" on:change={handleFileSelection} disabled={busy} />
+            <span>导入 .txt</span>
+          </label>
+          <button type="button" class="ghost" on:click={() => dispatch('sample')} disabled={busy}>
+            载入示例
+          </button>
+        </div>
       </div>
 
+      <p class="file-help">支持中文纯文本 `.txt`，读取成功后会直接填入下方文本框。</p>
+
       <label>
-        <span>接口类型</span>
-        <select
-          value={selectedProvider}
-          on:change={(event) => dispatch('updateAiProvider', event.currentTarget.value as AiProviderKind)}
-          disabled={busy || settingsBusy}
-        >
-          {#each Object.entries(providerLabels) as [value, label]}
-            <option value={value}>{label}</option>
-          {/each}
-        </select>
+        <span>项目名称</span>
+        <input
+          value={projectName}
+          on:input={(event) => dispatch('updateProjectName', event.currentTarget.value)}
+          placeholder="例如：临川夜话"
+          disabled={busy}
+        />
       </label>
 
-      {#if selectedProvider !== 'heuristic'}
-        <div class="provider-grid">
-          <label>
-            <span>Base URL</span>
-            <input
-              value={activeDraft.base_url}
-              on:input={(event) => dispatch('updateAiBaseUrl', event.currentTarget.value)}
-              placeholder={selectedProvider === 'openrouter'
-                ? 'https://openrouter.ai/api/v1'
-                : 'https://api.openai.com/v1'}
-              disabled={busy || settingsBusy}
-            />
-          </label>
+      <label>
+        <span>小说正文</span>
+        <textarea
+          bind:this={novelTextarea}
+          value={novelText}
+          on:input={handleNovelTextInput}
+          style:overflow-y="hidden"
+          placeholder="粘贴 txt 或 markdown 纯文本内容"
+          disabled={busy}
+        ></textarea>
+      </label>
 
-          <label>
-            <span>模型</span>
-            <input
-              value={activeDraft.model}
-              on:input={(event) => dispatch('updateAiModel', event.currentTarget.value)}
-              placeholder={selectedProvider === 'openrouter' ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'}
-              disabled={busy || settingsBusy}
-            />
-          </label>
+      <section class="provider-panel">
+        <div class="provider-head">
+          <div>
+            <p class="label">AI Provider</p>
+            <h3>接口设置</h3>
+          </div>
+          {#if selectedProvider !== 'heuristic'}
+            <span class:ready={activeSnapshot.has_api_key} class="status-pill">
+              {activeSnapshot.has_api_key ? '已保存 API key' : '未保存 API key'}
+            </span>
+          {/if}
         </div>
 
         <label>
-          <span>API key</span>
-          <input
-            type="password"
-            value={activeDraft.api_key ?? ''}
-            on:input={(event) => dispatch('updateAiApiKey', event.currentTarget.value)}
-            placeholder={activeSnapshot.has_api_key ? '输入新 key 可覆盖已保存密钥' : '输入后点击保存接口设置'}
+          <span>接口类型</span>
+          <select
+            value={selectedProvider}
+            on:change={(event) => dispatch('updateAiProvider', event.currentTarget.value as AiProviderKind)}
             disabled={busy || settingsBusy}
-          />
+          >
+            {#each Object.entries(providerLabels) as [value, label]}
+              <option value={value}>{label}</option>
+            {/each}
+          </select>
         </label>
 
-        <div class="provider-actions">
-          <button
-            type="button"
-            class="ghost"
-            on:click={() => dispatch('saveAiSettings')}
-            disabled={busy || settingsBusy}
-          >
-            {settingsBusy ? '保存中' : '保存接口设置'}
-          </button>
+        {#if selectedProvider !== 'heuristic'}
+          <div class="provider-grid">
+            <label>
+              <span>Base URL</span>
+              <input
+                value={activeDraft.base_url}
+                on:input={(event) => dispatch('updateAiBaseUrl', event.currentTarget.value)}
+                placeholder={selectedProvider === 'openrouter'
+                  ? 'https://openrouter.ai/api/v1'
+                  : 'https://api.openai.com/v1'}
+                disabled={busy || settingsBusy}
+              />
+            </label>
 
-          <button
-            type="button"
-            class="ghost quiet"
-            on:click={() => dispatch('clearProviderApiKey', selectedProvider)}
-            disabled={busy || settingsBusy || !activeSnapshot.has_api_key}
-          >
-            清除已存密钥
-          </button>
-        </div>
+            <label>
+              <span>模型</span>
+              <input
+                value={activeDraft.model}
+                on:input={(event) => dispatch('updateAiModel', event.currentTarget.value)}
+                placeholder={selectedProvider === 'openrouter' ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'}
+                disabled={busy || settingsBusy}
+              />
+            </label>
+          </div>
 
-        {#if externalProviderIncomplete}
-          <p class="hint">需要填写 base URL、模型和 API key</p>
+          <label>
+            <span>API key</span>
+            <input
+              type="password"
+              value={activeDraft.api_key ?? ''}
+              on:input={(event) => dispatch('updateAiApiKey', event.currentTarget.value)}
+              placeholder={activeSnapshot.has_api_key ? '输入新 key 可覆盖已保存密钥' : '输入后点击保存接口设置'}
+              disabled={busy || settingsBusy}
+            />
+          </label>
+
+          <div class="provider-actions">
+            <button
+              type="button"
+              class="ghost"
+              on:click={() => dispatch('saveAiSettings')}
+              disabled={busy || settingsBusy}
+            >
+              {settingsBusy ? '保存中' : '保存接口设置'}
+            </button>
+
+            <button
+              type="button"
+              class="ghost quiet"
+              on:click={() => dispatch('clearProviderApiKey', selectedProvider)}
+              disabled={busy || settingsBusy || !activeSnapshot.has_api_key}
+            >
+              清除已存密钥
+            </button>
+          </div>
+
+          {#if externalProviderIncomplete}
+            <p class="hint">需要填写 base URL、模型和 API key</p>
+          {/if}
         {/if}
+      </section>
+
+      {#if error}
+        <p class="error">{error}</p>
       {/if}
-    </section>
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
-
-    <button
-      type="button"
-      class="primary"
-      on:click={() => dispatch('submit')}
-      disabled={buildDisabled}
-    >
-      {busy ? '故事准备中' : '开始解析与改编'}
-    </button>
+      <button
+        type="button"
+        class="primary"
+        on:click={() => dispatch('submit')}
+        disabled={buildDisabled}
+      >
+        {busy ? '故事准备中' : '开始解析与改编'}
+      </button>
+    </div>
   </div>
+  {#if resumableProjects.length > 0}
+    <section class="resume-panel resume-shelf">
+      <div>
+        <p class="label">继续已有项目</p>
+        <h3>从上次构建好的故事继续</h3>
+      </div>
+
+      <div class="resume-list">
+        {#each resumableProjects as resumableProject (resumableProject.project.id)}
+          <article class="resume-item">
+            <div>
+              <strong>{resumableProject.project.name}</strong>
+              <p>{resumableProject.activityLabel}</p>
+              <p class="activity-time">
+                <span class="activity-meta">
+                  {resumableProject.activityMetaLabel ??
+                    (resumableProject.sessionId ? '最近游玩' : '最近导入')}
+                </span>
+                <span>{resumableProject.activityTimeLabel}</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              class="ghost"
+              on:click={() => dispatch('openProject', resumableProject.project.id)}
+              disabled={busy}
+            >
+              {resumableProject.ctaLabel}
+            </button>
+          </article>
+        {/each}
+      </div>
+    </section>
+  {/if}
 </section>
 
 <style>
+  .import-layout {
+    display: grid;
+    gap: 24px;
+    align-content: start;
+  }
+
   .workspace-hero {
     display: grid;
     grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
@@ -401,6 +408,10 @@
     display: grid;
     gap: 16px;
     padding: 24px 28px 28px;
+  }
+
+  .resume-shelf {
+    width: 100%;
   }
 
   .eyebrow,
@@ -522,13 +533,14 @@
 
   .resume-list {
     display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 12px;
   }
 
   .resume-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: space-between;
     gap: 16px;
     padding: 16px 18px;
     border-radius: 18px;
@@ -700,6 +712,10 @@
   }
 
   @media (max-width: 980px) {
+    .import-layout {
+      gap: 18px;
+    }
+
     .workspace-hero {
       grid-template-columns: 1fr;
     }
@@ -715,6 +731,11 @@
     }
 
     .outcome-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .resume-list,
+    .resume-item {
       grid-template-columns: 1fr;
     }
   }

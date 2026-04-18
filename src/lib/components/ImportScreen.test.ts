@@ -268,8 +268,8 @@ describe('ImportScreen', () => {
     expect(screen.getByText('这一步会产出')).toBeInTheDocument();
   });
 
-  it('surfaces saved projects with different actions for resumable sessions and review-only entries', () => {
-    render(ImportScreen, {
+  it('surfaces saved projects in a separate shelf so the hero columns stay balanced', () => {
+    const { container } = render(ImportScreen, {
       props: {
         projectName: '',
         novelText: '',
@@ -281,6 +281,14 @@ describe('ImportScreen', () => {
         settingsBusy: false
       }
     });
+
+    const supportRail = container.querySelector('.support-rail');
+    const workspaceHero = container.querySelector('.workspace-hero');
+    const resumeShelf = screen.getByText('继续已有项目').closest('section');
+
+    expect(resumeShelf).toBeTruthy();
+    expect(supportRail?.contains(resumeShelf as HTMLElement)).toBe(false);
+    expect(workspaceHero?.contains(resumeShelf as HTMLElement)).toBe(false);
 
     expect(screen.getByText('继续已有项目')).toBeInTheDocument();
     expect(screen.getByText('临川夜话')).toBeInTheDocument();
