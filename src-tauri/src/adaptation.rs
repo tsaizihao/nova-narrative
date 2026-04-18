@@ -162,9 +162,11 @@ mod tests {
 
         assert_eq!(kernel.source_novel.title, "临川夜话");
         assert_eq!(kernel.source_novel.chapter_count, 1);
+        assert_eq!(kernel.source_novel.chapters.len(), 1);
         assert_eq!(kernel.source_novel.chapters[0].chapter_id, "chapter-1");
         assert_eq!(kernel.source_novel.chapters[0].title, "第1章 雨夜来客");
         assert_eq!(kernel.source_novel.chapters[0].excerpt, "沈砚站在北门前。");
+        assert_eq!(kernel.canon_characters.len(), 1);
         assert_eq!(kernel.canon_characters[0].character_id, "character-1");
         assert_eq!(kernel.canon_characters[0].name, "沈砚");
         assert_eq!(kernel.canon_characters[0].protected_identity, "守门人");
@@ -176,12 +178,15 @@ mod tests {
             .any(|trait_name| trait_name == "克制"));
         assert_ne!(kernel.canon_characters[0].character_id, project.character_cards[0].id);
         assert_ne!(kernel.canon_characters[0].name, project.character_cards[0].name);
+        assert_eq!(kernel.relationship_graph.len(), 1);
         assert_eq!(kernel.relationship_graph[0].source, "沈砚");
         assert_eq!(kernel.relationship_graph[0].target, "北门");
         assert_eq!(kernel.relationship_graph[0].label, "守护");
         assert_eq!(kernel.relationship_graph[0].strength, 3);
+        assert_eq!(kernel.world_rules.len(), 1);
         assert_eq!(kernel.world_rules[0].id, "world-rule-1");
         assert_eq!(kernel.world_rules[0].description, "午夜之后不能打开北门");
+        assert_eq!(kernel.event_graph.len(), 1);
         assert_eq!(kernel.event_graph[0].event_id, "event-chapter-1");
         assert_eq!(kernel.event_graph[0].chapter_id, "chapter-1");
         assert_eq!(kernel.event_graph[0].title, "第1章 雨夜来客");
