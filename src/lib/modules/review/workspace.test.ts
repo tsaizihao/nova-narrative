@@ -238,7 +238,13 @@ describe('review workspace controller', () => {
 
     const state = get(workspace);
     expect(state.activeSection).toBe('characters');
-    expect(state.activeSelection.characters).toBe('char-1');
+    const expectedSelection: typeof state.activeSelection = {
+      canon: null,
+      characters: 'char-1',
+      worldbook: 'w1',
+      rules: 'rule-1'
+    };
+    expect(state.activeSelection).toEqual(expectedSelection);
     expect(state.project.character_cards[0].name).toBe('沈砚（已保存）');
     expect(state.drafts.worldbook.w1.title).toBe('北门（未保存草稿）');
     expect(state.preview.status).toBe('stale');

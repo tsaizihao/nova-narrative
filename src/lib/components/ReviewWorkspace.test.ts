@@ -22,6 +22,39 @@ const project: NovelProject = {
     progress: 100
   },
   story_package: null,
+  adaptation_kernel: {
+    source_novel: {
+      title: '北门夜话',
+      chapter_count: 1,
+      chapters: [{ chapter_id: 'chapter-1', title: '第1章 雨夜', excerpt: '沈砚在门前。' }]
+    },
+    canon_characters: [
+      {
+        character_id: 'c1',
+        name: '阿遥',
+        protected_identity: '医生',
+        protected_role: '主角',
+        anchor_traits: ['冷静', '克制'],
+        summary: '冷静克制'
+      }
+    ],
+    relationship_graph: [{ source: '阿遥', target: '北门', label: '调查', strength: 2 }],
+    event_graph: [
+      {
+        event_id: 'event-chapter-1',
+        chapter_id: 'chapter-1',
+        title: '第1章 雨夜',
+        summary: '沈砚在门前。',
+        locked: true
+      }
+    ],
+    world_rules: [{ id: 'rule-1', description: '午夜不能开门' }],
+    constraints: {
+      preserve_character_core: true,
+      allow_relationship_rewire: true,
+      allow_player_insert: true
+    }
+  },
   character_cards: [
     {
       id: 'c1',
@@ -145,6 +178,7 @@ function createState(overrides: Partial<ReviewWorkspaceState> = {}): ReviewWorks
     project,
     activeSection: 'characters',
     activeSelection: {
+      canon: null,
       characters: 'c1',
       worldbook: 'w1',
       rules: 'r1'
@@ -181,6 +215,26 @@ function createState(overrides: Partial<ReviewWorkspaceState> = {}): ReviewWorks
 }
 
 describe('ReviewWorkspace', () => {
+  it('renders the canon section without hiding the preview rail', async () => {
+    render(ReviewWorkspace, {
+      props: {
+        state: createState({
+          activeSection: 'canon',
+          activeSelection: {
+            ...createState().activeSelection,
+            canon: null
+          }
+        })
+      }
+    });
+
+    expect(screen.getByRole('heading', { name: '原著内核' })).toBeInTheDocument();
+    expect(screen.getByText('人物性格锚点')).toBeInTheDocument();
+    expect(screen.getByText('北门夜话')).toBeInTheDocument();
+    expect(screen.getByText('保留人物核心')).toBeInTheDocument();
+    expect(screen.getByTestId('review-preview-rail')).toBeInTheDocument();
+  });
+
   it('renders from controlled review state and keeps preview visible', async () => {
     render(ReviewWorkspace, {
       props: {

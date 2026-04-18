@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
+  import CanonReviewPanel from './CanonReviewPanel.svelte';
   import CharacterReviewPanel from './CharacterReviewPanel.svelte';
   import ReviewPreviewPanel from './ReviewPreviewPanel.svelte';
   import RuleBookPanel from './RuleBookPanel.svelte';
@@ -35,14 +36,18 @@
   }>();
 
   $: activeCount =
-    state.activeSection === 'characters'
+    state.activeSection === 'canon'
+      ? state.project.adaptation_kernel?.canon_characters.length ?? 0
+      : state.activeSection === 'characters'
       ? state.project.character_cards.length
       : state.activeSection === 'worldbook'
         ? state.project.worldbook_entries.length
         : state.project.rules.length;
 
   $: sectionTitle =
-    state.activeSection === 'characters'
+    state.activeSection === 'canon'
+      ? '原著内核'
+      : state.activeSection === 'characters'
       ? '角色编辑'
       : state.activeSection === 'worldbook'
         ? '世界书编辑'
@@ -82,7 +87,9 @@
       <p class="workspace-error" role="alert">{state.error}</p>
     {/if}
 
-    {#if state.activeSection === 'characters'}
+    {#if state.activeSection === 'canon'}
+      <CanonReviewPanel kernel={state.project.adaptation_kernel ?? null} />
+    {:else if state.activeSection === 'characters'}
       <CharacterReviewPanel
         cards={state.project.character_cards}
         activeId={state.activeSelection.characters}

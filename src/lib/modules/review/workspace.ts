@@ -168,6 +168,7 @@ function createInitialState(project: NovelProject): ReviewWorkspaceState {
     project: clone(project),
     activeSection: 'characters',
     activeSelection: {
+      canon: null,
       characters: firstId(project.character_cards),
       worldbook: firstId(project.worldbook_entries),
       rules: firstId(project.rules)
