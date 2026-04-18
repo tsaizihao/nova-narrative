@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ReaderSceneBlock } from '$lib/modules/runtime/reader-history';
 
-  export interface ReaderActivityItem {
+  interface ReaderActivityItem {
     id: string;
     label: string;
     detail: string;

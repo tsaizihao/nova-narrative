@@ -32,7 +32,7 @@
   let unsubscribe: Unsubscriber | null = null;
   let activeSessionId = '';
   let historyState: ReaderHistoryState | null = null;
-  let history = historyState?.blocks ?? [];
+  let history: ReaderHistoryState['blocks'] = [];
   let activity: Array<{
     id: string;
     label: string;

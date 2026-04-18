@@ -75,7 +75,8 @@ describe('EndingScreen', () => {
     });
 
     expect(screen.getByRole('heading', { name: '守约结局' })).toBeInTheDocument();
-    expect(container.querySelector('.ending')).toHaveAttribute('data-tone', 'paper');
+    expect(screen.getByText('Ending')).toBeInTheDocument();
+    expect(container.querySelector('.ending-shell')).toHaveAttribute('data-tone', 'paper');
 
     await fireEvent.click(screen.getByRole('button', { name: '第1章 雨夜来客' }));
   });
