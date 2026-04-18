@@ -898,6 +898,7 @@ impl ProjectStore {
 
 fn rebuild_story_package_from_project(project: &mut NovelProject) {
     let story_bible = story_bible_snapshot(project);
+    project.adaptation_kernel = Some(build_adaptation_kernel(project, &story_bible));
     project.story_package = Some(compile_story_package(project, story_bible));
 }
 
@@ -1498,7 +1499,8 @@ mod tests {
     #[test]
     fn build_story_package_persists_adaptation_kernel_on_project_and_package() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+        let runtime_dir = dir.path().to_path_buf();
+        let mut store = ProjectStore::new(runtime_dir.clone()).expect("store");
 
         let project = store.create_project("临川夜话").expect("project");
         store
@@ -1506,12 +1508,13 @@ mod tests {
             .expect("import");
         store.build_story_package(&project.id).expect("build");
 
-        let project = store.get_project(&project.id).expect("project");
+        let reloaded_store = ProjectStore::reload(runtime_dir).expect("reload");
+        let project = reloaded_store.get_project(&project.id).expect("project");
         let kernel = project.adaptation_kernel.as_ref().expect("project kernel");
         assert_eq!(kernel.canon_characters.len(), project.character_cards.len());
         assert_eq!(kernel.source_novel.chapter_count, project.chapters.len());
 
-        let package = store.load_story_package(&project.id).expect("package");
+        let package = reloaded_store.load_story_package(&project.id).expect("package");
         let package_kernel = package.adaptation_kernel.as_ref().expect("package kernel");
         assert_eq!(package_kernel.event_graph.len(), project.chapters.len());
         assert_eq!(package_kernel.world_rules.len(), package.story_bible.world_rules.len());
@@ -1520,7 +1523,8 @@ mod tests {
     #[test]
     fn reimport_clears_adaptation_kernel_with_other_build_artifacts() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+        let runtime_dir = dir.path().to_path_buf();
+        let mut store = ProjectStore::new(runtime_dir.clone()).expect("store");
 
         let project = store.create_project("临川夜话").expect("project");
         store
@@ -1534,9 +1538,64 @@ mod tests {
 
         assert!(reimported.adaptation_kernel.is_none());
 
-        let reloaded = store.get_project(&project.id).expect("project");
+        let reloaded_store = ProjectStore::reload(runtime_dir).expect("reload");
+        let reloaded = reloaded_store.get_project(&project.id).expect("project");
         assert!(reloaded.story_package.is_none());
         assert!(reloaded.adaptation_kernel.is_none());
+        assert!(reloaded.character_cards.is_empty());
+        assert!(reloaded.worldbook_entries.is_empty());
+        assert!(reloaded.rules.is_empty());
+    }
+
+    #[test]
+    fn update_character_card_refreshes_adaptation_kernel_in_rebuilt_package() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let runtime_dir = dir.path().to_path_buf();
+        let mut store = ProjectStore::new(runtime_dir.clone()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+
+        let mut updated_card = store
+            .get_project(&project.id)
+            .expect("project")
+            .character_cards
+            .first()
+            .cloned()
+            .expect("built project should include character cards");
+        updated_card.identity = "临川城守望者".into();
+        updated_card.summary = "重新修订的角色摘要".into();
+
+        store
+            .update_character_card(&project.id, updated_card.clone())
+            .expect("update card");
+
+        let reloaded_store = ProjectStore::reload(runtime_dir).expect("reload");
+        let reloaded_project = reloaded_store.get_project(&project.id).expect("project");
+        let project_kernel = reloaded_project
+            .adaptation_kernel
+            .as_ref()
+            .expect("project kernel");
+        let project_anchor = project_kernel
+            .canon_characters
+            .iter()
+            .find(|anchor| anchor.character_id == updated_card.id)
+            .expect("updated character in project kernel");
+        assert_eq!(project_anchor.protected_identity, updated_card.identity);
+        assert_eq!(project_anchor.summary, updated_card.summary);
+
+        let package = reloaded_store.load_story_package(&project.id).expect("package");
+        let package_kernel = package.adaptation_kernel.as_ref().expect("package kernel");
+        let package_anchor = package_kernel
+            .canon_characters
+            .iter()
+            .find(|anchor| anchor.character_id == updated_card.id)
+            .expect("updated character in package kernel");
+        assert_eq!(package_anchor.protected_identity, updated_card.identity);
+        assert_eq!(package_anchor.summary, updated_card.summary);
     }
 
     #[test]
