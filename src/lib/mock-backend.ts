@@ -454,6 +454,8 @@ function buildWorldBook(characters: CharacterCard[], rules: RuleDefinition[]): W
 function buildStoryBible(project: NovelProject): StoryBible {
   const chapters = project.chapters;
   const title = project.name;
+  const protagonistName = project.character_cards[0]?.name ?? '沈砚';
+  const counterpartName = project.character_cards[1]?.name ?? '宁昭';
   const conflicts: CoreConflict[] = [
     {
       id: 'conflict-1',
@@ -480,8 +482,8 @@ function buildStoryBible(project: NovelProject): StoryBible {
       description: rule.explanation
     })),
     relationships: [
-      { source: '沈砚', target: '宁昭', label: '信任与拉扯', strength: 2 },
-      { source: '沈砚', target: '城规', label: '服从与反抗', strength: -1 }
+      { source: protagonistName, target: counterpartName, label: '信任与拉扯', strength: 2 },
+      { source: protagonistName, target: '城规', label: '服从与反抗', strength: -1 }
     ],
     core_conflicts: conflicts
   };
@@ -510,13 +512,17 @@ function buildAdaptationKernel(
       summary: character.summary
     })),
     relationship_graph: clone(storyBible.relationships),
-    event_graph: project.chapters.map((chapter) => ({
-      event_id: `event-${chapter.id}`,
-      chapter_id: chapter.id,
-      title: chapter.title,
-      summary: chapter.excerpt,
-      locked: true
-    })),
+    event_graph: project.chapters.map((chapter, index) => {
+      const timelineEntry =
+        storyBible.timeline.find((entry) => entry.order === chapter.order) ?? storyBible.timeline[index];
+      return {
+        event_id: `event-${chapter.id}`,
+        chapter_id: chapter.id,
+        title: timelineEntry?.label ?? chapter.title,
+        summary: timelineEntry?.summary ?? chapter.excerpt,
+        locked: true
+      };
+    }),
     world_rules: clone(storyBible.world_rules),
     constraints: {
       preserve_character_core: true,

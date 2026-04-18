@@ -22,6 +22,7 @@ use crate::{
         ReviewPreviewExplanations, ReviewPreviewSnapshot, RuntimeSnapshot, SaveAiSettingsInput,
         SavedProjectActivityKind, SavedProjectLibraryEntry, SceneNode, ScenePayload, SessionState,
         SessionStatus, StoryBible, StoryCodex, StoryPackage, TimelineEntry, WorldRule,
+        RelationshipEdge,
     },
     provider::{
         ChatCompletionsTransport, HeuristicStoryProvider, KeyringSecretStore,
@@ -928,6 +929,38 @@ fn sort_saved_project_entries(entries: &mut [SavedProjectLibraryEntry]) {
     });
 }
 
+fn remap_relationship_names(
+    relationships: &[RelationshipEdge],
+    previous_characters: &[CharacterCard],
+    current_characters: &[CharacterCard],
+) -> Vec<RelationshipEdge> {
+    let renamed_characters = previous_characters
+        .iter()
+        .filter_map(|previous| {
+            current_characters
+                .iter()
+                .find(|current| current.id == previous.id)
+                .map(|current| (previous.name.clone(), current.name.clone()))
+        })
+        .collect::<HashMap<_, _>>();
+
+    relationships
+        .iter()
+        .map(|edge| RelationshipEdge {
+            source: renamed_characters
+                .get(&edge.source)
+                .cloned()
+                .unwrap_or_else(|| edge.source.clone()),
+            target: renamed_characters
+                .get(&edge.target)
+                .cloned()
+                .unwrap_or_else(|| edge.target.clone()),
+            label: edge.label.clone(),
+            strength: edge.strength,
+        })
+        .collect()
+}
+
 fn session_status_rank(status: &SessionStatus) -> u8 {
     match status {
         SessionStatus::Active => 2,
@@ -1165,7 +1198,13 @@ fn story_bible_snapshot(project: &NovelProject) -> StoryBible {
         },
         relationships: existing
             .as_ref()
-            .map(|bible| bible.relationships.clone())
+            .map(|bible| {
+                remap_relationship_names(
+                    &bible.relationships,
+                    &bible.characters,
+                    &project.character_cards,
+                )
+            })
             .unwrap_or_default(),
         core_conflicts: existing
             .as_ref()
@@ -1182,9 +1221,9 @@ fn story_bible_snapshot(project: &NovelProject) -> StoryBible {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, sync::Arc, thread::sleep, time::Duration};
+    use std::{collections::BTreeMap, fs, sync::Arc, thread::sleep, time::Duration};
 
-    use super::ProjectStore;
+    use super::{story_bible_snapshot, ProjectStore};
     use crate::{
         error::AppError,
         infra::{
@@ -1193,8 +1232,10 @@ mod tests {
         },
         importer::split_novel_into_chapters,
         models::{
-            AiProviderKind, BuildStage, ExternalProviderSettingsInput, ReviewPreviewContext,
-            SaveAiSettingsInput, SavedProjectActivityKind, SavedProjectLibraryEntry,
+            AiProviderKind, BuildStage, BuildStatus, CharacterCard, ExternalProviderSettingsInput,
+            NovelProject, RelationshipEdge, ReviewPreviewContext, SaveAiSettingsInput,
+            SavedProjectActivityKind, SavedProjectLibraryEntry, StoryBible, StoryPackage,
+            WorldModelSnapshot,
         },
         provider::{FakeChatCompletionsTransport, InMemorySecretStore},
     };
@@ -1938,6 +1979,83 @@ mod tests {
             .get_current_scene(&session_id)
             .expect_err("session should stay removed after reload");
         assert!(matches!(error, AppError::NotFound(_)));
+    }
+
+    #[test]
+    fn story_bible_snapshot_relabels_relationships_when_characters_are_renamed() {
+        let previous_lead = CharacterCard {
+            id: "char-1".into(),
+            name: "沈砚".into(),
+            gender: "male".into(),
+            age: Some(27),
+            identity: "巡夜人".into(),
+            faction: "巡城司".into(),
+            role: "主角".into(),
+            summary: "旧的角色名".into(),
+            desire: "守住边界".into(),
+            secrets: Vec::new(),
+            traits: vec!["冷静".into()],
+            abilities: vec!["追踪".into()],
+            mutable_state: BTreeMap::new(),
+        };
+        let current_lead = CharacterCard {
+            name: "沈砚（改名后）".into(),
+            ..previous_lead.clone()
+        };
+        let counterpart = CharacterCard {
+            id: "char-2".into(),
+            name: "宁昭".into(),
+            gender: "female".into(),
+            age: Some(25),
+            identity: "医师".into(),
+            faction: "临川城".into(),
+            role: "关键人物".into(),
+            summary: "对主角保持警惕".into(),
+            desire: "查清北门真相".into(),
+            secrets: Vec::new(),
+            traits: vec!["克制".into()],
+            abilities: vec!["诊疗".into()],
+            mutable_state: BTreeMap::new(),
+        };
+
+        let project = NovelProject {
+            id: "project-1".into(),
+            name: "临川夜话".into(),
+            raw_text: String::new(),
+            chapters: Vec::new(),
+            build_status: BuildStatus::default(),
+            story_package: Some(StoryPackage {
+                story_bible: StoryBible {
+                    title: "临川夜话".into(),
+                    characters: vec![previous_lead.clone(), counterpart.clone()],
+                    locations: Vec::new(),
+                    timeline: Vec::new(),
+                    world_rules: Vec::new(),
+                    relationships: vec![RelationshipEdge {
+                        source: previous_lead.name.clone(),
+                        target: counterpart.name.clone(),
+                        label: "同盟".into(),
+                        strength: 2,
+                    }],
+                    core_conflicts: Vec::new(),
+                },
+                world_model: WorldModelSnapshot::default(),
+                adaptation_kernel: None,
+                start_scene_id: "scene-1".into(),
+                scenes: BTreeMap::new(),
+            }),
+            character_cards: vec![current_lead.clone(), counterpart.clone()],
+            worldbook_entries: Vec::new(),
+            rules: Vec::new(),
+            review_preview_context: None,
+            adaptation_kernel: None,
+        };
+
+        let snapshot = story_bible_snapshot(&project);
+
+        assert_eq!(snapshot.relationships.len(), 1);
+        assert_eq!(snapshot.relationships[0].source, current_lead.name);
+        assert_eq!(snapshot.relationships[0].target, counterpart.name);
     }
 
     #[test]

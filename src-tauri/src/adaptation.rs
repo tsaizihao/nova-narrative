@@ -33,12 +33,24 @@ pub fn build_adaptation_kernel(
     let event_graph = project
         .chapters
         .iter()
-        .map(|chapter| CanonEventAnchor {
-            event_id: format!("event-{}", chapter.id),
-            chapter_id: chapter.id.clone(),
-            title: chapter.title.clone(),
-            summary: chapter.excerpt.clone(),
-            locked: true,
+        .enumerate()
+        .map(|(index, chapter)| {
+            let timeline_entry = story_bible
+                .timeline
+                .iter()
+                .find(|entry| entry.order == chapter.order)
+                .or_else(|| story_bible.timeline.get(index));
+            CanonEventAnchor {
+                event_id: format!("event-{}", chapter.id),
+                chapter_id: chapter.id.clone(),
+                title: timeline_entry
+                    .map(|entry| entry.label.clone())
+                    .unwrap_or_else(|| chapter.title.clone()),
+                summary: timeline_entry
+                    .map(|entry| entry.summary.clone())
+                    .unwrap_or_else(|| chapter.excerpt.clone()),
+                locked: true,
+            }
         })
         .collect();
 
@@ -131,9 +143,9 @@ mod tests {
             locations: Vec::new(),
             timeline: vec![TimelineEntry {
                 id: "timeline-1".into(),
-                label: "第1章 雨夜来客".into(),
+                label: "时间线·雨夜来客".into(),
                 order: 1,
-                summary: "沈砚站在北门前。".into(),
+                summary: "时间线摘要：沈砚在北门前停步。".into(),
             }],
             world_rules: vec![WorldRule {
                 id: "world-rule-1".into(),
@@ -189,8 +201,8 @@ mod tests {
         assert_eq!(kernel.event_graph.len(), 1);
         assert_eq!(kernel.event_graph[0].event_id, "event-chapter-1");
         assert_eq!(kernel.event_graph[0].chapter_id, "chapter-1");
-        assert_eq!(kernel.event_graph[0].title, "第1章 雨夜来客");
-        assert_eq!(kernel.event_graph[0].summary, "沈砚站在北门前。");
+        assert_eq!(kernel.event_graph[0].title, "时间线·雨夜来客");
+        assert_eq!(kernel.event_graph[0].summary, "时间线摘要：沈砚在北门前停步。");
         assert!(kernel.event_graph[0].locked);
         assert!(kernel.constraints.preserve_character_core);
         assert!(kernel.constraints.allow_relationship_rewire);
