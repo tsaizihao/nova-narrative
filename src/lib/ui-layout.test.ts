@@ -15,6 +15,7 @@ describe('resolveReaderLayoutMode', () => {
 describe('REVIEW_SECTIONS', () => {
   it('keeps the authoring tabs in the intended order', () => {
     expect(REVIEW_SECTIONS.map((section) => section.id)).toEqual([
+      'canon',
       'characters',
       'worldbook',
       'rules'

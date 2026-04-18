@@ -131,6 +131,56 @@ pub struct ChapterChunk {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SourceChapterSnapshot {
+    pub chapter_id: String,
+    pub title: String,
+    pub excerpt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SourceNovelSnapshot {
+    pub title: String,
+    pub chapter_count: usize,
+    pub chapters: Vec<SourceChapterSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CanonCharacterAnchor {
+    pub character_id: String,
+    pub name: String,
+    pub protected_identity: String,
+    pub protected_role: String,
+    pub anchor_traits: Vec<String>,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CanonEventAnchor {
+    pub event_id: String,
+    pub chapter_id: String,
+    pub title: String,
+    pub summary: String,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdaptationConstraintSet {
+    pub preserve_character_core: bool,
+    pub allow_relationship_rewire: bool,
+    pub allow_player_insert: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdaptationKernelSnapshot {
+    pub source_novel: SourceNovelSnapshot,
+    pub canon_characters: Vec<CanonCharacterAnchor>,
+    pub relationship_graph: Vec<RelationshipEdge>,
+    pub event_graph: Vec<CanonEventAnchor>,
+    pub world_rules: Vec<WorldRule>,
+    pub constraints: AdaptationConstraintSet,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NovelProject {
     pub id: String,
     pub name: String,
@@ -143,6 +193,8 @@ pub struct NovelProject {
     pub rules: Vec<RuleDefinition>,
     #[serde(default)]
     pub review_preview_context: Option<ReviewPreviewContext>,
+    #[serde(default)]
+    pub adaptation_kernel: Option<AdaptationKernelSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -269,6 +321,8 @@ pub struct SceneNode {
 pub struct StoryPackage {
     pub story_bible: StoryBible,
     pub world_model: WorldModelSnapshot,
+    #[serde(default)]
+    pub adaptation_kernel: Option<AdaptationKernelSnapshot>,
     pub start_scene_id: String,
     pub scenes: BTreeMap<String, SceneNode>,
 }

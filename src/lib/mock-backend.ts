@@ -1,4 +1,5 @@
 import type {
+  AdaptationKernelSnapshot,
   AiProviderKind,
   ActiveLoreEntry,
   ActiveRuleHit,
@@ -116,6 +117,7 @@ function splitChapterLines(text: string) {
 function clearProjectBuildOutputs(project: NovelProject): NovelProject {
   return {
     ...project,
+    adaptation_kernel: null,
     story_package: null,
     character_cards: [],
     worldbook_entries: [],
@@ -452,6 +454,9 @@ function buildWorldBook(characters: CharacterCard[], rules: RuleDefinition[]): W
 function buildStoryBible(project: NovelProject): StoryBible {
   const chapters = project.chapters;
   const title = project.name;
+  const protagonistName = project.character_cards[0]?.name ?? '沈砚';
+  const counterpartName = project.character_cards[1]?.name ?? '宁昭';
+  const existingWorldRules = project.story_package?.story_bible.world_rules ?? [];
   const conflicts: CoreConflict[] = [
     {
       id: 'conflict-1',
@@ -473,15 +478,61 @@ function buildStoryBible(project: NovelProject): StoryBible {
       order: chapter.order,
       summary: chapter.excerpt
     })),
-    world_rules: project.rules.map((rule) => ({
-      id: rule.id,
-      description: rule.explanation
-    })),
+    world_rules:
+      project.rules.length === 0
+        ? clone(existingWorldRules)
+        : project.rules.map((rule) => ({
+            id: rule.id,
+            description: rule.explanation
+          })),
     relationships: [
-      { source: '沈砚', target: '宁昭', label: '信任与拉扯', strength: 2 },
-      { source: '沈砚', target: '城规', label: '服从与反抗', strength: -1 }
+      { source: protagonistName, target: counterpartName, label: '信任与拉扯', strength: 2 },
+      { source: protagonistName, target: '城规', label: '服从与反抗', strength: -1 }
     ],
     core_conflicts: conflicts
+  };
+}
+
+function buildAdaptationKernel(
+  project: NovelProject,
+  storyBible: StoryBible
+): AdaptationKernelSnapshot {
+  return {
+    source_novel: {
+      title: project.name,
+      chapter_count: project.chapters.length,
+      chapters: project.chapters.map((chapter) => ({
+        chapter_id: chapter.id,
+        title: chapter.title,
+        excerpt: chapter.excerpt
+      }))
+    },
+    canon_characters: storyBible.characters.map((character) => ({
+      character_id: character.id,
+      name: character.name,
+      protected_identity: character.identity,
+      protected_role: character.role,
+      anchor_traits: clone(character.traits),
+      summary: character.summary
+    })),
+    relationship_graph: clone(storyBible.relationships),
+    event_graph: project.chapters.map((chapter, index) => {
+      const timelineEntry =
+        storyBible.timeline.find((entry) => entry.order === chapter.order) ?? storyBible.timeline[index];
+      return {
+        event_id: `event-${chapter.id}`,
+        chapter_id: chapter.id,
+        title: timelineEntry?.label ?? chapter.title,
+        summary: timelineEntry?.summary ?? chapter.excerpt,
+        locked: true
+      };
+    }),
+    world_rules: clone(storyBible.world_rules),
+    constraints: {
+      preserve_character_core: true,
+      allow_relationship_rewire: true,
+      allow_player_insert: true
+    }
   };
 }
 
@@ -498,6 +549,7 @@ function makeChoice(id: string, label: string, nextSceneId: string, intent: stri
 
 function buildStoryPackage(project: NovelProject): StoryPackage {
   const bible = buildStoryBible(project);
+  const adaptationKernel = buildAdaptationKernel(project, bible);
   const intro = project.chapters[0]?.excerpt ?? '故事开始了。';
   const middle = project.chapters[1]?.excerpt ?? '旧约在逼近。';
   const finale = project.chapters[2]?.excerpt ?? '最后的选择已经到来。';
@@ -637,6 +689,7 @@ function buildStoryPackage(project: NovelProject): StoryPackage {
       worldbook_entries: clone(project.worldbook_entries),
       rules: clone(project.rules)
     },
+    adaptation_kernel: adaptationKernel,
     start_scene_id: 'scene-1',
     scenes
   };
@@ -1015,6 +1068,7 @@ function rebuildProject(project: NovelProject): NovelProject {
   const storyPackage = buildStoryPackage(project);
   const updated: NovelProject = {
     ...project,
+    adaptation_kernel: clone(storyPackage.adaptation_kernel ?? null),
     story_package: storyPackage,
     build_status: {
       stage: 'ready',

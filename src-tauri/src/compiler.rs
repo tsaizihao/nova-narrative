@@ -37,6 +37,7 @@ pub fn compile_story_package(project: &NovelProject, story_bible: StoryBible) ->
             worldbook_entries: project.worldbook_entries.clone(),
             rules: project.rules.clone(),
         },
+        adaptation_kernel: project.adaptation_kernel.clone(),
         start_scene_id: "scene-1".into(),
         scenes: build_scenes(&chapters, decision_index, &protagonist, &counterpart),
     }

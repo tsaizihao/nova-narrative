@@ -1,7 +1,9 @@
 import { invokeCommand } from '$lib/backend/commandClient';
+import { getProject as getProjectSnapshot } from '$lib/modules/projects/backend';
 import type {
   ActiveLoreEntry,
   CharacterCard,
+  NovelProject,
   ReviewPreviewContext,
   ReviewPreviewSnapshot,
   RuleDefinition,
@@ -29,6 +31,8 @@ export const upsertRule = (projectId: string, rule: RuleDefinition): Promise<Rul
 
 export const deleteRule = (projectId: string, ruleId: string): Promise<RuleDefinition[]> =>
   invokeCommand('delete_rule', { projectId, ruleId });
+
+export const getProject = (projectId: string): Promise<NovelProject> => getProjectSnapshot(projectId);
 
 export const previewActiveWorldbook = (
   projectId: string,

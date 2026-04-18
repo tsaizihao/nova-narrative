@@ -203,13 +203,96 @@ function deferred<T>() {
 describe('review workspace controller', () => {
   it('preserves active selection and unsaved drafts in other sections after save', async () => {
     const project = createProject();
+    const savedCharacter = {
+      ...project.character_cards[0],
+      name: '沈砚（已保存）'
+    };
+    const refreshedProject: NovelProject = {
+      ...project,
+      character_cards: [savedCharacter],
+      adaptation_kernel: {
+        source_novel: {
+          title: project.name,
+          chapter_count: project.chapters.length,
+          chapters: []
+        },
+        canon_characters: [
+          {
+            character_id: savedCharacter.id,
+            name: savedCharacter.name,
+            protected_identity: savedCharacter.identity,
+            protected_role: savedCharacter.role,
+            anchor_traits: savedCharacter.traits,
+            summary: savedCharacter.summary
+          }
+        ],
+        relationship_graph: [],
+        event_graph: [],
+        world_rules: [
+          {
+            id: 'rule-1',
+            description: '午夜不能开北门'
+          }
+        ],
+        constraints: {
+          preserve_character_core: true,
+          allow_relationship_rewire: true,
+          allow_player_insert: true
+        }
+      },
+      story_package: {
+        ...project.story_package!,
+        story_bible: {
+          ...project.story_package!.story_bible,
+          characters: [savedCharacter],
+          world_rules: [
+            {
+              id: 'rule-1',
+              description: '午夜不能开北门'
+            }
+          ]
+        },
+        world_model: {
+          ...project.story_package!.world_model,
+          character_cards: [savedCharacter]
+        },
+        adaptation_kernel: {
+          source_novel: {
+            title: project.name,
+            chapter_count: project.chapters.length,
+            chapters: []
+          },
+          canon_characters: [
+            {
+              character_id: savedCharacter.id,
+              name: savedCharacter.name,
+              protected_identity: savedCharacter.identity,
+              protected_role: savedCharacter.role,
+              anchor_traits: savedCharacter.traits,
+              summary: savedCharacter.summary
+            }
+          ],
+          relationship_graph: [],
+          event_graph: [],
+          world_rules: [
+            {
+              id: 'rule-1',
+              description: '午夜不能开北门'
+            }
+          ],
+          constraints: {
+            preserve_character_core: true,
+            allow_relationship_rewire: true,
+            allow_player_insert: true
+          }
+        }
+      }
+    };
     const deps = {
       updateCharacterCard: vi.fn().mockResolvedValue([
-        {
-          ...project.character_cards[0],
-          name: '沈砚（已保存）'
-        }
+        savedCharacter
       ]),
+      getProject: vi.fn().mockResolvedValue(refreshedProject),
       upsertWorldBookEntry: vi.fn(),
       deleteWorldBookEntry: vi.fn(),
       upsertRule: vi.fn(),
@@ -238,17 +321,27 @@ describe('review workspace controller', () => {
 
     const state = get(workspace);
     expect(state.activeSection).toBe('characters');
-    expect(state.activeSelection.characters).toBe('char-1');
+    const expectedSelection: typeof state.activeSelection = {
+      canon: null,
+      characters: 'char-1',
+      worldbook: 'w1',
+      rules: 'rule-1'
+    };
+    expect(state.activeSelection).toEqual(expectedSelection);
     expect(state.project.character_cards[0].name).toBe('沈砚（已保存）');
+    expect(state.project.story_package?.story_bible.characters[0]?.name).toBe('沈砚（已保存）');
+    expect(state.project.adaptation_kernel?.canon_characters[0]?.name).toBe('沈砚（已保存）');
     expect(state.drafts.worldbook.w1.title).toBe('北门（未保存草稿）');
     expect(state.preview.status).toBe('stale');
     expect(state.preview.previewSnapshot?.context.sceneId).toBe('scene-1');
+    expect(deps.getProject).toHaveBeenCalledWith(project.id);
   });
 
   it('loads persisted preview context and refreshes aggregated preview', async () => {
     const snapshot = createPreviewSnapshot();
     const workspace = createReviewWorkspaceController(createProject(), {
       updateCharacterCard: vi.fn(),
+      getProject: vi.fn(),
       upsertWorldBookEntry: vi.fn(),
       deleteWorldBookEntry: vi.fn(),
       upsertRule: vi.fn(),
@@ -273,6 +366,7 @@ describe('review workspace controller', () => {
     const saveContext = vi.fn().mockResolvedValue(createPreviewContext({ sceneId: 'scene-1' }));
     const workspace = createReviewWorkspaceController(createProject(), {
       updateCharacterCard: vi.fn(),
+      getProject: vi.fn(),
       upsertWorldBookEntry: vi.fn(),
       deleteWorldBookEntry: vi.fn(),
       upsertRule: vi.fn(),
@@ -326,6 +420,7 @@ describe('review workspace controller', () => {
     const appliedSnapshot = createPreviewSnapshot();
     const workspace = createReviewWorkspaceController(createProject(), {
       updateCharacterCard: vi.fn(),
+      getProject: vi.fn(),
       upsertWorldBookEntry: vi.fn(),
       deleteWorldBookEntry: vi.fn(),
       upsertRule: vi.fn(),

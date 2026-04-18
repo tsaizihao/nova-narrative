@@ -50,6 +50,39 @@ describe('mockBackend AI settings', () => {
 });
 
 describe('mockBackend import/build flow', () => {
+  it('builds adaptation kernel snapshots for the project and package', async () => {
+    await mockBackend.save_ai_settings({
+      selected_provider: 'heuristic',
+      openai_compatible: {
+        base_url: '',
+        model: ''
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: ''
+      }
+    });
+
+    const project = await mockBackend.create_project('临川夜话');
+    await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚听见了钟声。'].join('\n')
+    );
+    await mockBackend.build_story_package(project.id);
+
+    const builtProject = await mockBackend.get_project(project.id);
+    expect(builtProject.adaptation_kernel?.source_novel.title).toBe('临川夜话');
+    expect(builtProject.adaptation_kernel?.canon_characters.length).toBeGreaterThan(0);
+
+    const storyPackage = await mockBackend.load_story_package(project.id);
+    expect(storyPackage.adaptation_kernel?.source_novel.chapter_count).toBe(
+      builtProject.chapters.length
+    );
+    expect(storyPackage.adaptation_kernel?.canon_characters[0]?.name).toBe(
+      builtProject.character_cards[0]?.name
+    );
+  });
+
   it('rejects whitespace-only imports without mutating the current project snapshot', async () => {
     const project = await mockBackend.create_project('临川夜话');
     const imported = await mockBackend.import_novel_text(
@@ -92,12 +125,54 @@ describe('mockBackend import/build flow', () => {
     );
 
     expect(reimported.story_package).toBeNull();
+    expect(reimported.adaptation_kernel).toBeNull();
     expect(reimported.character_cards).toHaveLength(0);
     expect(reimported.worldbook_entries).toHaveLength(0);
     expect(reimported.rules).toHaveLength(0);
     expect(reimported.build_status.stage).toBe('imported');
 
     await expect(mockBackend.get_current_scene(session.session_id)).rejects.toThrow();
+  });
+
+  it('preserves canon world rules after deleting the last editable rule', async () => {
+    await mockBackend.save_ai_settings({
+      selected_provider: 'heuristic',
+      openai_compatible: {
+        base_url: '',
+        model: ''
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: ''
+      }
+    });
+
+    const project = await mockBackend.create_project('临川夜话');
+    await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚听见了钟声。'].join('\n')
+    );
+    await mockBackend.build_story_package(project.id);
+
+    const built = await mockBackend.get_project(project.id);
+    expect(built.rules.length).toBeGreaterThan(0);
+
+    for (const rule of built.rules.slice(0, -1)) {
+      await mockBackend.delete_rule(project.id, rule.id);
+    }
+
+    const beforeLastDelete = await mockBackend.get_project(project.id);
+    const expectedWorldRules = beforeLastDelete.story_package?.story_bible.world_rules ?? [];
+    expect(expectedWorldRules.length).toBeGreaterThan(0);
+
+    const lastRuleId = beforeLastDelete.rules[0]?.id;
+    expect(lastRuleId).toBeTruthy();
+    await mockBackend.delete_rule(project.id, lastRuleId!);
+
+    const afterDelete = await mockBackend.get_project(project.id);
+    expect(afterDelete.rules).toHaveLength(0);
+    expect(afterDelete.story_package?.story_bible.world_rules).toEqual(expectedWorldRules);
+    expect(afterDelete.adaptation_kernel?.world_rules).toEqual(expectedWorldRules);
   });
 
   it('persists failed build status when external provider configuration is incomplete', async () => {
