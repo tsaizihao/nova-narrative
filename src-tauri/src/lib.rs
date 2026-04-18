@@ -1,5 +1,6 @@
 mod app_api;
 mod analyzer;
+mod adaptation;
 mod application;
 mod commands;
 mod compiler;
