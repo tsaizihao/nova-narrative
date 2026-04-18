@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
 import ReaderDesktopShell from './ReaderDesktopShell.svelte';
@@ -134,8 +134,14 @@ describe('ReaderDesktopShell', () => {
       }
     });
 
+    const desktopHeader = document.querySelector('.reader-head');
+    expect(desktopHeader).not.toBeNull();
+
     expect(screen.getByText('示例小说')).toBeInTheDocument();
+    expect(within(desktopHeader as HTMLElement).getByRole('heading', { name: '北门之夜', level: 1 })).toBeInTheDocument();
+    expect(within(desktopHeader as HTMLElement).getByText('第 1 章')).toBeInTheDocument();
     expect(document.querySelector('.reader-stage')).toHaveAttribute('data-flow', 'longform');
+    expect(screen.getByRole('button', { name: '返回审阅台' })).toBeInTheDocument();
     const worldTrigger = screen.getByRole('button', { name: '世界设定' });
     expect(worldTrigger).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '状态与日志' })).toBeInTheDocument();
@@ -149,6 +155,39 @@ describe('ReaderDesktopShell', () => {
     await fireEvent.keyDown(worldDialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '世界设定' })).not.toBeInTheDocument();
     expect(worldTrigger).toHaveFocus();
+  });
+
+  it('uses fallback project name when projectName is omitted or empty', () => {
+    const history = createReaderHistory(snapshot);
+
+    const { rerender } = render(ReaderDesktopShell, {
+      props: {
+        snapshot,
+        history: history.blocks,
+        activity: [],
+        freeInput: '',
+        busy: false,
+        error: '',
+        autoplay: false,
+        retryAvailable: true
+      }
+    });
+
+    expect(screen.getByText('互动故事')).toBeInTheDocument();
+
+    rerender({
+      projectName: '',
+      snapshot,
+      history: history.blocks,
+      activity: [],
+      freeInput: '',
+      busy: false,
+      error: '',
+      autoplay: false,
+      retryAvailable: true
+    });
+
+    expect(screen.getByText('互动故事')).toBeInTheDocument();
   });
 });
 
@@ -170,12 +209,49 @@ describe('ReaderMobileShell', () => {
       }
     });
 
+    const mobileHeader = document.querySelector('.mobile-head');
+    expect(mobileHeader).not.toBeNull();
+
     expect(screen.getByText('示例小说')).toBeInTheDocument();
+    expect(within(mobileHeader as HTMLElement).getByRole('heading', { name: '北门之夜', level: 1 })).toBeInTheDocument();
     expect(document.querySelector('.reader-stage')).toHaveAttribute('data-flow', 'longform');
 
     await fireEvent.click(screen.getByRole('button', { name: '状态与日志' }));
     const stateDialog = screen.getByRole('dialog', { name: '状态与日志' });
     expect(stateDialog).toHaveAttribute('data-side', 'right');
     expect(screen.getByRole('button', { name: '自动播放' })).toBeInTheDocument();
+  });
+
+  it('uses fallback project name when projectName is omitted or empty', () => {
+    const history = createReaderHistory(snapshot);
+
+    const { rerender } = render(ReaderMobileShell, {
+      props: {
+        snapshot,
+        history: history.blocks,
+        activity: [],
+        freeInput: '',
+        busy: false,
+        error: '',
+        autoplay: false,
+        retryAvailable: true
+      }
+    });
+
+    expect(screen.getByText('互动故事')).toBeInTheDocument();
+
+    rerender({
+      projectName: '',
+      snapshot,
+      history: history.blocks,
+      activity: [],
+      freeInput: '',
+      busy: false,
+      error: '',
+      autoplay: false,
+      retryAvailable: true
+    });
+
+    expect(screen.getByText('互动故事')).toBeInTheDocument();
   });
 });
