@@ -89,6 +89,31 @@ mod tests {
             },
             story_package: None,
             character_cards: vec![CharacterCard {
+                id: "project-character-1".into(),
+                name: "误导角色".into(),
+                gender: "male".into(),
+                age: Some(30),
+                identity: "项目角色身份".into(),
+                faction: "项目阵营".into(),
+                role: "项目角色".into(),
+                summary: "用于验证不会被映射".into(),
+                desire: "干扰测试".into(),
+                secrets: vec!["不应出现在 canon_characters".into()],
+                traits: vec!["干扰".into()],
+                abilities: vec!["误导".into()],
+                mutable_state: BTreeMap::new(),
+            }],
+            worldbook_entries: Vec::new(),
+            rules: Vec::new(),
+            review_preview_context: None,
+            adaptation_kernel: None,
+        }
+    }
+
+    fn sample_story_bible() -> StoryBible {
+        StoryBible {
+            title: "临川夜话".into(),
+            characters: vec![CharacterCard {
                 id: "character-1".into(),
                 name: "沈砚".into(),
                 gender: "male".into(),
@@ -103,17 +128,6 @@ mod tests {
                 abilities: vec!["守门".into()],
                 mutable_state: BTreeMap::new(),
             }],
-            worldbook_entries: Vec::new(),
-            rules: Vec::new(),
-            review_preview_context: None,
-            adaptation_kernel: None,
-        }
-    }
-
-    fn sample_story_bible() -> StoryBible {
-        StoryBible {
-            title: "临川夜话".into(),
-            characters: sample_project().character_cards,
             locations: Vec::new(),
             timeline: vec![TimelineEntry {
                 id: "timeline-1".into(),
@@ -148,12 +162,31 @@ mod tests {
 
         assert_eq!(kernel.source_novel.title, "临川夜话");
         assert_eq!(kernel.source_novel.chapter_count, 1);
+        assert_eq!(kernel.source_novel.chapters[0].chapter_id, "chapter-1");
+        assert_eq!(kernel.source_novel.chapters[0].title, "第1章 雨夜来客");
+        assert_eq!(kernel.source_novel.chapters[0].excerpt, "沈砚站在北门前。");
         assert_eq!(kernel.canon_characters[0].character_id, "character-1");
+        assert_eq!(kernel.canon_characters[0].name, "沈砚");
+        assert_eq!(kernel.canon_characters[0].protected_identity, "守门人");
+        assert_eq!(kernel.canon_characters[0].protected_role, "主视角");
+        assert_eq!(kernel.canon_characters[0].summary, "谨慎而克制");
         assert!(kernel.canon_characters[0]
             .anchor_traits
             .iter()
             .any(|trait_name| trait_name == "克制"));
+        assert_ne!(kernel.canon_characters[0].character_id, project.character_cards[0].id);
+        assert_ne!(kernel.canon_characters[0].name, project.character_cards[0].name);
+        assert_eq!(kernel.relationship_graph[0].source, "沈砚");
+        assert_eq!(kernel.relationship_graph[0].target, "北门");
+        assert_eq!(kernel.relationship_graph[0].label, "守护");
+        assert_eq!(kernel.relationship_graph[0].strength, 3);
+        assert_eq!(kernel.world_rules[0].id, "world-rule-1");
+        assert_eq!(kernel.world_rules[0].description, "午夜之后不能打开北门");
+        assert_eq!(kernel.event_graph[0].event_id, "event-chapter-1");
         assert_eq!(kernel.event_graph[0].chapter_id, "chapter-1");
+        assert_eq!(kernel.event_graph[0].title, "第1章 雨夜来客");
+        assert_eq!(kernel.event_graph[0].summary, "沈砚站在北门前。");
+        assert!(kernel.event_graph[0].locked);
         assert!(kernel.constraints.preserve_character_core);
         assert!(kernel.constraints.allow_relationship_rewire);
         assert!(kernel.constraints.allow_player_insert);
