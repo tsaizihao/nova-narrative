@@ -1,360 +1,201 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import type { ReaderSceneBlock } from '$lib/modules/runtime/reader-history';
 
-  import { sceneEmotionTint } from '$lib/story-helpers';
-  import type { ScenePayload } from '$lib/types';
+  export interface ReaderActivityItem {
+    id: string;
+    label: string;
+    detail: string;
+    tone: 'muted' | 'accent' | 'danger';
+  }
 
-  export let payload: ScenePayload;
-  export let busy = false;
-  export let busyLabel = '';
-  export let error = '';
-  export let freeInput = '';
-
-  const dispatch = createEventDispatcher<{
-    choose: string;
-    freeInputChange: string;
-    submitFreeInput: void;
-  }>();
-
-  $: tint = sceneEmotionTint(payload.scene.title);
+  export let blocks: ReaderSceneBlock[] = [];
+  export let activity: ReaderActivityItem[] = [];
 </script>
 
-<section class={`stage ${tint}`}>
-  <div class="stage-header">
-    <div>
-      <p class="eyebrow">Chapter {payload.scene.chapter}</p>
-      <h2>{payload.scene.title}</h2>
-    </div>
-    <div class="tool-pills">
-      <span>{payload.session.visited_scenes.length} 个场景</span>
-      <span>{payload.active_rules.length} 条规则命中</span>
-    </div>
-  </div>
-
-  <div class="story-surface">
-    <div class="narration">
-      {#each payload.scene.narration as paragraph}
-        <p>{paragraph}</p>
-      {/each}
-    </div>
-
-    {#if payload.scene.dialogue.length}
-      <div class="dialogue-strip">
-        {#each payload.scene.dialogue as line}
-          <article>
-            <strong>{line.speaker}</strong>
-            <span>{line.emotion}</span>
-            <p>{line.text}</p>
-          </article>
-        {/each}
-      </div>
-    {/if}
-
-    {#if payload.active_rules.length}
-      <div class="rule-pills">
-        {#each payload.active_rules as rule}
-          <span>{rule.name}</span>
-        {/each}
-      </div>
-    {/if}
-  </div>
-
-  <div class="decision-sheet">
-    {#if busy && busyLabel}
-      <p class="busy-hint">{busyLabel}</p>
-    {/if}
-
-    <div class="choices">
-      {#each payload.scene.candidate_choices as choice}
-        <button
-          type="button"
-          aria-label={choice.label}
-          class:locked={choice.unlock_conditions.length > 0 && !choice.unlock_conditions.every((condition) => payload.session.rule_flags.includes(condition))}
-          on:click={() => dispatch('choose', choice.id)}
-          disabled={busy}
-        >
-          <strong>{choice.label}</strong>
-          <span>
-            {#if choice.unlock_conditions.length}
-              需要条件：{choice.unlock_conditions.join(' / ')}
-            {:else}
-              {choice.intent_tag}
-            {/if}
-          </span>
-        </button>
-      {/each}
-    </div>
-
-    {#if payload.scene.allow_free_input}
-      <div class="free-input">
-        <label>
-          <span>自由行动</span>
-          <textarea
-            value={freeInput}
-            on:input={(event) => dispatch('freeInputChange', event.currentTarget.value)}
-            placeholder="例如：我暂时隐瞒真相，先稳住对方。"
-            maxlength="120"
-            disabled={busy}
-          ></textarea>
-        </label>
-        <button
-          type="button"
-          class="secondary"
-          on:click={() => dispatch('submitFreeInput')}
-          disabled={busy || !freeInput.trim()}
-        >
-          {#if busy && busyLabel}
-            {busyLabel}
-          {:else}
-            把这句话写进故事
+<section class="reader-stage" data-flow="longform">
+  <div class="paper-sheet">
+    {#each blocks as block (block.id)}
+      <article class="scene-block" data-current={block.isCurrent ? 'true' : 'false'}>
+        <header class="scene-header">
+          <p class="eyebrow">第 {block.chapter} 章</p>
+          <h2>{block.title}</h2>
+          {#if block.summary}
+            <p class="scene-summary">{block.summary}</p>
           {/if}
-        </button>
-      </div>
-    {/if}
+        </header>
 
-    {#if error}
-      <p class="error">{error}</p>
+        <div class="scene-prose">
+          {#each block.narration as paragraph}
+            <p>{paragraph}</p>
+          {/each}
+
+          {#each block.dialogue as line}
+            <p class="dialogue-line">
+              <span class="speaker">{line.speaker}</span>
+              {#if line.emotion}
+                <span class="emotion">{line.emotion}</span>
+              {/if}
+              {line.text}
+            </p>
+          {/each}
+        </div>
+
+        {#if block.activeRules.length}
+          <div class="rule-inline">
+            {#each block.activeRules as rule}
+              <span>{rule.name}</span>
+            {/each}
+          </div>
+        {/if}
+      </article>
+    {/each}
+
+    {#if activity.length}
+      <section class="activity-feed" aria-label="最近动作结果">
+        <h3 class="activity-heading">最近动作结果</h3>
+        <ul class="activity-list">
+          {#each activity as item (item.id)}
+            <li>
+              <p class={`tone-${item.tone}`}>
+                <strong>{item.label}</strong>
+                {item.detail}
+              </p>
+            </li>
+          {/each}
+        </ul>
+      </section>
     {/if}
   </div>
 </section>
 
 <style>
-  .stage {
+  .reader-stage {
+    min-width: 0;
+  }
+
+  .paper-sheet {
+    display: grid;
+    gap: 24px;
+    padding: 24px clamp(18px, 3vw, 42px) 32px;
+    border: 1px solid rgba(121, 103, 81, 0.12);
+    border-radius: 32px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 238, 226, 0.96)),
+      rgba(248, 243, 234, 0.98);
+    box-shadow: 0 18px 36px rgba(70, 54, 39, 0.08);
+  }
+
+  .scene-block {
     display: grid;
     gap: 18px;
-    padding: 24px;
-    border-radius: 30px;
-    border: 1px solid var(--reader-border, rgba(255, 243, 214, 0.08));
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(244, 236, 225, 0.72)),
-      radial-gradient(circle at top, rgba(215, 194, 166, 0.35), transparent 52%),
-      var(--reader-shell-surface, rgba(248, 243, 234, 0.96));
-    box-shadow: var(--reader-stage-shadow, 0 22px 44px rgba(89, 68, 48, 0.12));
+    padding-bottom: 24px;
+    border-bottom: 1px solid rgba(121, 103, 81, 0.12);
   }
 
-  .stage.warning {
-    background:
-      linear-gradient(180deg, rgba(255, 251, 244, 0.72), rgba(243, 231, 211, 0.86)),
-      radial-gradient(circle at top, rgba(213, 140, 52, 0.16), transparent 44%),
-      var(--reader-shell-surface, rgba(248, 243, 234, 0.96));
+  .scene-block:last-of-type {
+    border-bottom: none;
+    padding-bottom: 0;
   }
 
-  .stage.reveal {
-    background:
-      linear-gradient(180deg, rgba(255, 252, 247, 0.74), rgba(240, 233, 221, 0.88)),
-      radial-gradient(circle at top, rgba(183, 165, 128, 0.18), transparent 46%),
-      var(--reader-shell-surface, rgba(248, 243, 234, 0.96));
-  }
-
-  .stage-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: flex-start;
+  .scene-header {
+    display: grid;
+    gap: 8px;
   }
 
   .eyebrow {
-    margin: 0 0 8px;
-    color: var(--reader-eyebrow, #91765d);
-    text-transform: uppercase;
+    margin: 0;
+    color: #91765d;
     letter-spacing: 0.18em;
-    font-size: 0.68rem;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+  }
+
+  h2,
+  .scene-summary,
+  .scene-prose p {
+    margin: 0;
   }
 
   h2 {
-    margin: 0;
-    max-width: 12ch;
     font-family: 'Iowan Old Style', 'Songti SC', serif;
-    font-size: clamp(2.2rem, 4vw, 3.4rem);
-    color: var(--reader-title, #2f261d);
+    font-size: clamp(1.8rem, 3vw, 2.6rem);
+    color: #2f261d;
   }
 
-  .tool-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: flex-end;
+  .scene-summary {
+    color: rgba(63, 47, 35, 0.72);
+    font-size: 0.95rem;
   }
 
-  .tool-pills span {
-    padding: 10px 14px;
-    border-radius: 999px;
-    background: var(--reader-chip-surface, rgba(121, 103, 81, 0.08));
-    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
-    font-size: 0.8rem;
-  }
-
-  .story-surface {
-    display: grid;
-    gap: 16px;
-    padding: 24px;
-    border-radius: 26px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(250, 244, 236, 0.86)),
-      var(--reader-panel-surface, rgba(253, 250, 245, 0.96));
-    min-height: 420px;
-  }
-
-  .narration {
+  .scene-prose {
     display: grid;
     gap: 14px;
   }
 
-  .narration p {
-    margin: 0;
+  .scene-prose p {
+    color: rgba(47, 38, 29, 0.9);
     line-height: 1.92;
     font-size: 1.04rem;
-    color: var(--reader-body, rgba(47, 38, 29, 0.9));
   }
 
-  .dialogue-strip {
-    display: grid;
-    gap: 12px;
+  .dialogue-line .speaker {
+    margin-right: 10px;
+    color: #1f6a57;
+    font-weight: 700;
   }
 
-  .dialogue-strip article {
-    padding: 16px;
-    border-radius: 18px;
-    background: var(--reader-card-surface, rgba(244, 236, 225, 0.82));
-    border: 1px solid var(--reader-border, rgba(121, 103, 81, 0.14));
-  }
-
-  .dialogue-strip strong,
-  .dialogue-strip span,
-  .dialogue-strip p {
-    display: block;
-  }
-
-  .dialogue-strip span {
-    margin-top: 4px;
-    color: var(--reader-warm-accent, #9b6d39);
+  .dialogue-line .emotion {
+    margin-right: 8px;
+    color: #9b6d39;
     font-size: 0.82rem;
   }
 
-  .dialogue-strip p {
-    margin: 10px 0 0;
-    color: var(--reader-body, rgba(47, 38, 29, 0.88));
-    line-height: 1.7;
-  }
-
-  .rule-pills {
+  .rule-inline,
+  .activity-list {
     display: flex;
-    flex-wrap: wrap;
     gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .rule-pills span {
+  .activity-feed {
+    display: grid;
+    gap: 10px;
+  }
+
+  .activity-heading {
+    margin: 0;
+    color: rgba(63, 47, 35, 0.72);
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+  }
+
+  .activity-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .activity-list li {
+    margin: 0;
+  }
+
+  .rule-inline span,
+  .activity-feed p {
+    margin: 0;
     padding: 8px 12px;
     border-radius: 999px;
-    background: rgba(181, 135, 78, 0.12);
-    border: 1px solid rgba(181, 135, 78, 0.2);
-    color: var(--reader-warm-accent, #9b6d39);
-    font-size: 0.8rem;
-  }
-
-  .decision-sheet {
-    display: grid;
-    gap: 16px;
-    padding: 18px;
-    border-radius: 24px;
-    background: var(--reader-panel-surface, rgba(253, 250, 245, 0.96));
-    border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.08));
-  }
-
-  .choices {
-    display: grid;
-    gap: 12px;
-  }
-
-  .choices button,
-  .secondary {
-    border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.08));
-    border-radius: 20px;
-    background: var(--reader-card-surface, rgba(255, 248, 230, 0.04));
-    color: var(--reader-title, #2f261d);
-    font: inherit;
-    cursor: pointer;
-    transition:
-      transform 160ms ease,
-      border-color 160ms ease,
-      background 160ms ease;
-  }
-
-  .choices button {
-    text-align: left;
-    padding: 16px 18px;
-  }
-
-  .choices button:hover,
-  .secondary:hover {
-    transform: translateY(-1px);
-    border-color: rgba(151, 117, 77, 0.22);
-    background: rgba(255, 255, 255, 0.72);
-  }
-
-  .choices button strong,
-  .choices button span {
-    display: block;
-  }
-
-  .choices button span {
-    margin-top: 6px;
-    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
+    background: rgba(181, 135, 78, 0.1);
+    color: #9b6d39;
     font-size: 0.82rem;
   }
 
-  .choices button.locked {
-    border-color: rgba(177, 77, 59, 0.26);
+  .activity-feed p.tone-accent {
+    background: rgba(31, 106, 87, 0.1);
+    color: #1f6a57;
   }
 
-  .free-input {
-    display: grid;
-    gap: 12px;
-  }
-
-  label {
-    display: grid;
-    gap: 8px;
-  }
-
-  label span {
-    font-size: 0.82rem;
-    color: var(--reader-muted, rgba(63, 47, 35, 0.64));
-  }
-
-  textarea {
-    min-height: 94px;
-    border-radius: 18px;
-    border: 1px solid var(--reader-border, rgba(255, 238, 207, 0.1));
-    background: rgba(255, 255, 255, 0.92);
-    color: var(--reader-body, rgba(47, 38, 29, 0.9));
-    font: inherit;
-    padding: 14px 16px;
-    resize: vertical;
-  }
-
-  .secondary {
-    min-height: 46px;
-  }
-
-  .error {
-    margin: 0;
-    color: var(--reader-danger, #b14d3b);
-  }
-
-  .busy-hint {
-    margin: 0;
-    color: var(--reader-accent, #1f6a57);
-    font-size: 0.86rem;
-  }
-
-  @media (max-width: 720px) {
-    .stage-header {
-      display: grid;
-    }
-
-    .tool-pills {
-      justify-content: flex-start;
-    }
+  .activity-feed p.tone-danger {
+    background: rgba(177, 77, 59, 0.12);
+    color: #b14d3b;
   }
 </style>

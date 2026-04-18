@@ -1,89 +1,80 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 
 import ReaderStage from './ReaderStage.svelte';
-import type { ScenePayload } from '$lib/types';
+import type { ReaderSceneBlock } from '$lib/modules/runtime/reader-history';
 
-const payload: ScenePayload = {
-  scene: {
-    id: 'scene-1',
+const blocks: ReaderSceneBlock[] = [
+  {
+    id: 'scene-1-1',
+    sceneId: 'scene-1',
     chapter: 1,
     title: '北门之夜',
     summary: '夜色压城',
-    narration: ['第一段'],
-    dialogue: [],
-    entry_conditions: [],
-    present_characters: [],
-    candidate_choices: [
+    narration: ['第一段旁白', '第二段旁白'],
+    dialogue: [
       {
-        id: 'choice-1',
-        label: '前往北门',
-        intent_tag: 'inspect',
-        state_effects: [],
-        unlock_conditions: [],
-        next_scene_id: 'scene-2'
+        speaker: '林冲',
+        emotion: '克制',
+        text: '我先看看城门外。'
       }
     ],
-    fallback_next: null,
-    allow_free_input: true,
-    checkpoint: true,
-    ending: null
+    activeRules: [
+      {
+        rule_id: 'rule-1',
+        name: '午夜禁令',
+        priority: 'hard_constraint',
+        explanation: '午夜不能开门',
+        effects: [],
+        reason: '命中午夜'
+      }
+    ],
+    visitedCount: 1,
+    isCurrent: false
   },
-  session: {
-    session_id: 'session-1',
-    project_id: 'project-1',
-    current_scene_id: 'scene-1',
-    visited_scenes: ['scene-1'],
-    known_facts: [],
-    relationship_deltas: {},
-    rule_flags: [],
-    major_choices: [],
-    available_checkpoints: [],
-    free_input_history: [],
-    ending_report: null,
-    story_state: {
-      current_scene_id: 'scene-1',
-      character_states: [],
-      fact_records: [],
-      relationship_states: {},
-      event_flags: [],
-      possibility_flags: [],
-      unlocked_rules: [],
-      visited_scenes: ['scene-1'],
-      checkpoints: []
-    },
-    lore_lifecycle: [],
-    last_active_rules: []
-  },
-  active_lore: [],
-  active_rules: [],
-  story_state: {
-    current_scene_id: 'scene-1',
-    character_states: [],
-    fact_records: [],
-    relationship_states: {},
-    event_flags: [],
-    possibility_flags: [],
-    unlocked_rules: [],
-    visited_scenes: ['scene-1'],
-    checkpoints: []
+  {
+    id: 'scene-2-2',
+    sceneId: 'scene-2',
+    chapter: 2,
+    title: '第二幕',
+    summary: '风更紧了',
+    narration: ['第三段旁白'],
+    dialogue: [],
+    activeRules: [],
+    visitedCount: 2,
+    isCurrent: true
   }
-};
+];
 
 describe('ReaderStage', () => {
-  it('shows a busy action hint when the runtime is processing a decision', () => {
+  it('renders consecutive scene blocks as a longform paper flow', () => {
     const { container } = render(ReaderStage, {
       props: {
-        payload,
-        freeInput: '我先稳住对方',
-        busy: true,
-        busyLabel: '正在写入自由行动',
-        error: ''
+        blocks,
+        activity: [
+          {
+            id: 'activity-1',
+            label: '动作结果',
+            detail: '你暂时稳住了局面。',
+            tone: 'accent'
+          }
+        ]
       }
     });
 
-    expect(container.querySelector('.busy-hint')).toHaveTextContent('正在写入自由行动');
-    expect(screen.getByRole('button', { name: '前往北门' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '正在写入自由行动' })).toHaveTextContent('正在写入自由行动');
+    expect(container.querySelector('.reader-stage')).toHaveAttribute('data-flow', 'longform');
+    expect(container.querySelectorAll('.scene-block')).toHaveLength(2);
+    expect(container.querySelector('.scene-block[data-current="true"] h2')).toHaveTextContent('第二幕');
+    expect(container.querySelector('.paper-sheet > article.scene-block + article.scene-block')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '北门之夜' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '第二幕' })).toBeInTheDocument();
+    expect(screen.getByText('林冲')).toBeInTheDocument();
+    expect(screen.getByText('午夜禁令')).toBeInTheDocument();
+    expect(screen.getByText('你暂时稳住了局面。')).toBeInTheDocument();
+
+    const activityRegion = screen.getByRole('region', { name: '最近动作结果' });
+    expect(within(activityRegion).getByRole('list')).toBeInTheDocument();
+    expect(within(activityRegion).getAllByRole('listitem')).toHaveLength(1);
+    expect(container.querySelector('.activity-feed .tone-accent')).toHaveTextContent('动作结果');
   });
 });
