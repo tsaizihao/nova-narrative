@@ -34,10 +34,11 @@ function toSceneBlock(snapshot: RuntimeSnapshot): ReaderSceneBlock {
   };
 }
 
-function markCurrent(blocks: ReaderSceneBlock[], currentSceneId: string) {
-  return blocks.map((block) => ({
+function markCurrent(blocks: ReaderSceneBlock[]) {
+  const currentIndex = blocks.length - 1;
+  return blocks.map((block, index) => ({
     ...block,
-    isCurrent: block.sceneId === currentSceneId
+    isCurrent: index === currentIndex
   }));
 }
 
@@ -61,13 +62,13 @@ export function appendReaderSnapshot(
 
   if (state.currentSceneId === nextBlock.sceneId) {
     return {
-      blocks: markCurrent([...state.blocks.slice(0, -1), nextBlock], nextBlock.sceneId),
+      blocks: markCurrent([...state.blocks.slice(0, -1), nextBlock]),
       currentSceneId: nextBlock.sceneId
     };
   }
 
   return {
-    blocks: markCurrent([...state.blocks, nextBlock], nextBlock.sceneId),
+    blocks: markCurrent([...state.blocks, nextBlock]),
     currentSceneId: nextBlock.sceneId
   };
 }

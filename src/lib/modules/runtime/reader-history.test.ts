@@ -93,6 +93,27 @@ function createSnapshot(sceneId: string, title: string): RuntimeSnapshot {
   };
 }
 
+function withVisitedScenes(snapshot: RuntimeSnapshot, visitedScenes: string[]): RuntimeSnapshot {
+  return {
+    ...snapshot,
+    payload: {
+      ...snapshot.payload,
+      session: {
+        ...snapshot.payload.session,
+        visited_scenes: visitedScenes,
+        story_state: {
+          ...snapshot.payload.session.story_state,
+          visited_scenes: visitedScenes
+        }
+      },
+      story_state: {
+        ...snapshot.payload.story_state,
+        visited_scenes: visitedScenes
+      }
+    }
+  };
+}
+
 describe('reader-history', () => {
   it('creates one current block from the first snapshot', () => {
     const history = createReaderHistory(createSnapshot('scene-1', '北门之夜'));
@@ -109,14 +130,33 @@ describe('reader-history', () => {
   it('appends a new block for a new scene but replaces reloads of the same scene', () => {
     const first = createReaderHistory(createSnapshot('scene-1', '北门之夜'));
     const appended = appendReaderSnapshot(first, createSnapshot('scene-2', '第二幕'));
-    const refreshed = appendReaderSnapshot(appended, createSnapshot('scene-2', '第二幕'));
+    const refreshed = appendReaderSnapshot(appended, createSnapshot('scene-2', '第二幕（重载）'));
 
     expect(appended.blocks.map((block) => block.sceneId)).toEqual(['scene-1', 'scene-2']);
     expect(refreshed.blocks).toHaveLength(2);
     expect(refreshed.currentSceneId).toBe('scene-2');
     expect(refreshed.blocks[1].sceneId).toBe('scene-2');
+    expect(refreshed.blocks[1].title).toBe('第二幕（重载）');
+    expect(refreshed.blocks[1].summary).toBe('第二幕（重载） 摘要');
+    expect(refreshed.blocks[1].activeRules[0].name).toBe('第二幕（重载） 规则');
     expect(refreshed.blocks[1].isCurrent).toBe(true);
     expect(refreshed.blocks[0].isCurrent).toBe(false);
+  });
+
+  it('keeps exactly one current block when revisiting a previously seen scene id', () => {
+    const first = createReaderHistory(createSnapshot('scene-1', '北门之夜'));
+    const second = appendReaderSnapshot(first, createSnapshot('scene-2', '第二幕'));
+    const revisitedSnapshot = withVisitedScenes(
+      createSnapshot('scene-1', '北门之夜·回返'),
+      ['scene-1', 'scene-2', 'scene-1']
+    );
+    const revisited = appendReaderSnapshot(second, revisitedSnapshot);
+
+    expect(revisited.blocks.map((block) => block.sceneId)).toEqual(['scene-1', 'scene-2', 'scene-1']);
+    expect(revisited.currentSceneId).toBe('scene-1');
+    expect(revisited.blocks.filter((block) => block.isCurrent)).toHaveLength(1);
+    expect(revisited.blocks[2].isCurrent).toBe(true);
+    expect(revisited.blocks[0].isCurrent).toBe(false);
   });
 
   it('resets back to one current block after a rewind-style reset', () => {
