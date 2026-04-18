@@ -321,6 +321,8 @@ pub struct SceneNode {
 pub struct StoryPackage {
     pub story_bible: StoryBible,
     pub world_model: WorldModelSnapshot,
+    #[serde(default)]
+    pub adaptation_kernel: Option<AdaptationKernelSnapshot>,
     pub start_scene_id: String,
     pub scenes: BTreeMap<String, SceneNode>,
 }

@@ -41,6 +41,50 @@ export interface ChapterChunk {
   excerpt: string;
 }
 
+export interface SourceChapterSnapshot {
+  chapter_id: string;
+  title: string;
+  excerpt: string;
+}
+
+export interface SourceNovelSnapshot {
+  title: string;
+  chapter_count: number;
+  chapters: SourceChapterSnapshot[];
+}
+
+export interface CanonCharacterAnchor {
+  character_id: string;
+  name: string;
+  protected_identity: string;
+  protected_role: string;
+  anchor_traits: string[];
+  summary: string;
+}
+
+export interface CanonEventAnchor {
+  event_id: string;
+  chapter_id: string;
+  title: string;
+  summary: string;
+  locked: boolean;
+}
+
+export interface AdaptationConstraintSet {
+  preserve_character_core: boolean;
+  allow_relationship_rewire: boolean;
+  allow_player_insert: boolean;
+}
+
+export interface AdaptationKernelSnapshot {
+  source_novel: SourceNovelSnapshot;
+  canon_characters: CanonCharacterAnchor[];
+  relationship_graph: RelationshipEdge[];
+  event_graph: CanonEventAnchor[];
+  world_rules: WorldRule[];
+  constraints: AdaptationConstraintSet;
+}
+
 export type WorldBookCategory =
   | 'character'
   | 'location'
@@ -245,6 +289,7 @@ export interface SceneNode {
 export interface StoryPackage {
   story_bible: StoryBible;
   world_model: WorldModelSnapshot;
+  adaptation_kernel?: AdaptationKernelSnapshot | null;
   start_scene_id: string;
   scenes: Record<string, SceneNode>;
 }
@@ -402,6 +447,7 @@ export interface NovelProject {
   chapters: ChapterChunk[];
   build_status: BuildStatus;
   story_package?: StoryPackage | null;
+  adaptation_kernel?: AdaptationKernelSnapshot | null;
   character_cards: CharacterCard[];
   worldbook_entries: WorldBookEntry[];
   rules: RuleDefinition[];

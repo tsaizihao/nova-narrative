@@ -7,6 +7,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
+    adaptation::build_adaptation_kernel,
     analyzer::Analyzer,
     compiler::compile_story_package,
     error::{AppError, AppResult},
@@ -319,6 +320,8 @@ impl ProjectStore {
         project.character_cards = extracted.character_cards;
         project.worldbook_entries = extracted.worldbook_entries;
         project.rules = extracted.rules;
+        let adaptation_kernel = build_adaptation_kernel(&project, &extracted.story_bible);
+        project.adaptation_kernel = Some(adaptation_kernel);
         project.build_status = build_status(BuildStage::Compiling, "Compiling scene graph", 80, None);
         self.store_project_snapshot(project.clone())?;
         self.log_info(
@@ -900,6 +903,7 @@ fn rebuild_story_package_from_project(project: &mut NovelProject) {
 
 fn clear_build_derived_state(project: &mut NovelProject) {
     project.story_package = None;
+    project.adaptation_kernel = None;
     project.character_cards.clear();
     project.worldbook_entries.clear();
     project.rules.clear();
@@ -1489,6 +1493,50 @@ mod tests {
         );
         assert!(!package.world_model.worldbook_entries.is_empty());
         assert!(!package.world_model.rules.is_empty());
+    }
+
+    #[test]
+    fn build_story_package_persists_adaptation_kernel_on_project_and_package() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+
+        let project = store.get_project(&project.id).expect("project");
+        let kernel = project.adaptation_kernel.as_ref().expect("project kernel");
+        assert_eq!(kernel.canon_characters.len(), project.character_cards.len());
+        assert_eq!(kernel.source_novel.chapter_count, project.chapters.len());
+
+        let package = store.load_story_package(&project.id).expect("package");
+        let package_kernel = package.adaptation_kernel.as_ref().expect("package kernel");
+        assert_eq!(package_kernel.event_graph.len(), project.chapters.len());
+        assert_eq!(package_kernel.world_rules.len(), package.story_bible.world_rules.len());
+    }
+
+    #[test]
+    fn reimport_clears_adaptation_kernel_with_other_build_artifacts() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut store = ProjectStore::new(dir.path().to_path_buf()).expect("store");
+
+        let project = store.create_project("临川夜话").expect("project");
+        store
+            .import_novel_text(&project.id, &sample_novel())
+            .expect("import");
+        store.build_story_package(&project.id).expect("build");
+
+        let reimported = store
+            .import_novel_text(&project.id, "第1章 新章\n\n新的故事开始。")
+            .expect("reimport");
+
+        assert!(reimported.adaptation_kernel.is_none());
+
+        let reloaded = store.get_project(&project.id).expect("project");
+        assert!(reloaded.story_package.is_none());
+        assert!(reloaded.adaptation_kernel.is_none());
     }
 
     #[test]
