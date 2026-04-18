@@ -166,6 +166,7 @@ function normalizePreviewContext(
 function createInitialState(project: NovelProject): ReviewWorkspaceState {
   return {
     project: clone(project),
+    // Keep characters as the initial editable surface; canon is a read-only reference tab.
     activeSection: 'characters',
     activeSelection: {
       canon: null,

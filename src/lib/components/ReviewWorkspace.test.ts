@@ -233,6 +233,25 @@ describe('ReviewWorkspace', () => {
     expect(screen.getByText('北门夜话')).toBeInTheDocument();
     expect(screen.getByText('保留人物核心')).toBeInTheDocument();
     expect(screen.getByTestId('review-preview-rail')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '保存更改' })).not.toBeInTheDocument();
+  });
+
+  it('dispatches canon tab selection through controlled state', async () => {
+    const sectionChange = vi.fn();
+
+    render(ReviewWorkspace, {
+      props: {
+        state: createState()
+      },
+      events: {
+        setActiveSection: sectionChange
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '原著内核' }));
+
+    expect(sectionChange).toHaveBeenCalledTimes(1);
+    expect(sectionChange.mock.calls[0][0].detail).toBe('canon');
   });
 
   it('renders from controlled review state and keeps preview visible', async () => {
