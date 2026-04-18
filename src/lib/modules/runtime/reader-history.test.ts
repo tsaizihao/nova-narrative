@@ -135,6 +135,7 @@ describe('reader-history', () => {
     expect(appended.blocks.map((block) => block.sceneId)).toEqual(['scene-1', 'scene-2']);
     expect(refreshed.blocks).toHaveLength(2);
     expect(refreshed.currentSceneId).toBe('scene-2');
+    expect(refreshed.blocks[0].sceneId).toBe('scene-1');
     expect(refreshed.blocks[1].sceneId).toBe('scene-2');
     expect(refreshed.blocks[1].title).toBe('第二幕（重载）');
     expect(refreshed.blocks[1].summary).toBe('第二幕（重载） 摘要');
