@@ -3,6 +3,7 @@ use crate::models::{
     NovelProject, SourceChapterSnapshot, SourceNovelSnapshot, StoryBible,
 };
 
+#[allow(dead_code)]
 pub fn build_adaptation_kernel(
     project: &NovelProject,
     story_bible: &StoryBible,
