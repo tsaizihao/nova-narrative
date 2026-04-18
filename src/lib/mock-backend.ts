@@ -456,6 +456,7 @@ function buildStoryBible(project: NovelProject): StoryBible {
   const title = project.name;
   const protagonistName = project.character_cards[0]?.name ?? '沈砚';
   const counterpartName = project.character_cards[1]?.name ?? '宁昭';
+  const existingWorldRules = project.story_package?.story_bible.world_rules ?? [];
   const conflicts: CoreConflict[] = [
     {
       id: 'conflict-1',
@@ -477,10 +478,13 @@ function buildStoryBible(project: NovelProject): StoryBible {
       order: chapter.order,
       summary: chapter.excerpt
     })),
-    world_rules: project.rules.map((rule) => ({
-      id: rule.id,
-      description: rule.explanation
-    })),
+    world_rules:
+      project.rules.length === 0
+        ? clone(existingWorldRules)
+        : project.rules.map((rule) => ({
+            id: rule.id,
+            description: rule.explanation
+          })),
     relationships: [
       { source: protagonistName, target: counterpartName, label: '信任与拉扯', strength: 2 },
       { source: protagonistName, target: '城规', label: '服从与反抗', strength: -1 }

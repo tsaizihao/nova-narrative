@@ -43,6 +43,7 @@ export interface ReviewWorkspaceState {
 
 export interface ReviewWorkspaceBackend {
   updateCharacterCard(projectId: string, card: CharacterCard): Promise<CharacterCard[]>;
+  getProject(projectId: string): Promise<NovelProject>;
   upsertWorldBookEntry(projectId: string, entry: WorldBookEntry): Promise<WorldBookEntry[]>;
   deleteWorldBookEntry(projectId: string, entryId: string): Promise<WorldBookEntry[]>;
   upsertRule(projectId: string, rule: RuleDefinition): Promise<RuleDefinition[]>;
@@ -76,6 +77,7 @@ export interface ReviewWorkspaceController extends Readable<ReviewWorkspaceState
 
 const DEFAULT_RULE_SAMPLE_INPUT = '午夜去开门';
 const DEFAULT_RULE_EVENT_KIND = 'open_gate';
+type EditableSectionId = 'characters' | 'worldbook' | 'rules';
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -163,6 +165,104 @@ function normalizePreviewContext(
   };
 }
 
+function withSectionItems(
+  project: NovelProject,
+  section: EditableSectionId,
+  items: CharacterCard[] | WorldBookEntry[] | RuleDefinition[]
+): NovelProject {
+  switch (section) {
+    case 'characters':
+      return {
+        ...project,
+        character_cards: clone(items as CharacterCard[])
+      };
+    case 'worldbook':
+      return {
+        ...project,
+        worldbook_entries: clone(items as WorldBookEntry[])
+      };
+    case 'rules':
+      return {
+        ...project,
+        rules: clone(items as RuleDefinition[])
+      };
+  }
+}
+
+function reconcileProjectState(
+  current: ReviewWorkspaceState,
+  refreshedProject: NovelProject,
+  section: EditableSectionId,
+  savedId: string | null,
+  error = ''
+): ReviewWorkspaceState {
+  const characters = reconcileDraftMap(
+    refreshedProject.character_cards,
+    current.drafts.characters,
+    current.dirty.characters,
+    section === 'characters' ? savedId : undefined
+  );
+  const worldbook = reconcileDraftMap(
+    refreshedProject.worldbook_entries,
+    current.drafts.worldbook,
+    current.dirty.worldbook,
+    section === 'worldbook' ? savedId : undefined
+  );
+  const rules = reconcileDraftMap(
+    refreshedProject.rules,
+    current.drafts.rules,
+    current.dirty.rules,
+    section === 'rules' ? savedId : undefined
+  );
+
+  return {
+    ...current,
+    project: clone(refreshedProject),
+    activeSelection: {
+      ...current.activeSelection,
+      characters: selectionForItems(
+        current.activeSelection.characters,
+        refreshedProject.character_cards,
+        section === 'characters' ? savedId : undefined
+      ),
+      worldbook: selectionForItems(
+        current.activeSelection.worldbook,
+        refreshedProject.worldbook_entries,
+        section === 'worldbook' ? savedId : undefined
+      ),
+      rules: selectionForItems(
+        current.activeSelection.rules,
+        refreshedProject.rules,
+        section === 'rules' ? savedId : undefined
+      )
+    },
+    drafts: {
+      characters: characters.drafts,
+      worldbook: worldbook.drafts,
+      rules: rules.drafts
+    },
+    dirty: {
+      characters: characters.dirty,
+      worldbook: worldbook.dirty,
+      rules: rules.dirty
+    },
+    saveBusySection: null,
+    deleteBusySection: null,
+    error,
+    preview: {
+      ...current.preview,
+      previewContextDraft: normalizePreviewContext(
+        refreshedProject,
+        current.preview.previewContextDraft
+      ),
+      appliedPreviewContext: normalizePreviewContext(
+        refreshedProject,
+        current.preview.appliedPreviewContext
+      )
+    }
+  };
+}
+
 function createInitialState(project: NovelProject): ReviewWorkspaceState {
   return {
     project: clone(project),
@@ -218,6 +318,25 @@ export function createReviewWorkspaceController(
 ): ReviewWorkspaceController {
   const state = writable<ReviewWorkspaceState>(createInitialState(project));
   let latestPreviewRequestVersion = 0;
+
+  const loadProjectSnapshot = async (
+    currentProject: NovelProject,
+    section: EditableSectionId,
+    items: CharacterCard[] | WorldBookEntry[] | RuleDefinition[]
+  ) => {
+    const fallbackProject = withSectionItems(currentProject, section, items);
+    try {
+      return {
+        project: await deps.getProject(currentProject.id),
+        refreshError: ''
+      };
+    } catch (error) {
+      return {
+        project: fallbackProject,
+        refreshError: normalizeError(error, '刷新项目快照失败，已保留当前保存结果')
+      };
+    }
+  };
 
   const setActiveSection = (section: ReviewSectionId) => {
     state.update((current) => ({
@@ -466,33 +585,18 @@ export function createReviewWorkspaceController(
 
     try {
       const cards = await deps.updateCharacterCard(current.project.id, clone(draft));
+      const { project: refreshedProject, refreshError } = await loadProjectSnapshot(
+        current.project,
+        'characters',
+        cards
+      );
       latestPreviewRequestVersion += 1;
-      state.update((value) => {
-        const reconciled = reconcileDraftMap(cards, value.drafts.characters, value.dirty.characters, id);
-        return markPreviewStale(
-          {
-            ...value,
-            project: {
-              ...value.project,
-              character_cards: cards
-            },
-            activeSelection: {
-              ...value.activeSelection,
-              characters: selectionForItems(value.activeSelection.characters, cards, id)
-            },
-            drafts: {
-              ...value.drafts,
-              characters: reconciled.drafts
-            },
-            dirty: {
-              ...value.dirty,
-              characters: reconciled.dirty
-            },
-            saveBusySection: null
-          },
+      state.update((value) =>
+        markPreviewStale(
+          reconcileProjectState(value, refreshedProject, 'characters', id, refreshError),
           latestPreviewRequestVersion
-        );
-      });
+        )
+      );
     } catch (error) {
       state.update((value) => ({
         ...value,
@@ -517,33 +621,18 @@ export function createReviewWorkspaceController(
 
     try {
       const entries = await deps.upsertWorldBookEntry(current.project.id, clone(draft));
+      const { project: refreshedProject, refreshError } = await loadProjectSnapshot(
+        current.project,
+        'worldbook',
+        entries
+      );
       latestPreviewRequestVersion += 1;
-      state.update((value) => {
-        const reconciled = reconcileDraftMap(entries, value.drafts.worldbook, value.dirty.worldbook, id);
-        return markPreviewStale(
-          {
-            ...value,
-            project: {
-              ...value.project,
-              worldbook_entries: entries
-            },
-            activeSelection: {
-              ...value.activeSelection,
-              worldbook: selectionForItems(value.activeSelection.worldbook, entries, id)
-            },
-            drafts: {
-              ...value.drafts,
-              worldbook: reconciled.drafts
-            },
-            dirty: {
-              ...value.dirty,
-              worldbook: reconciled.dirty
-            },
-            saveBusySection: null
-          },
+      state.update((value) =>
+        markPreviewStale(
+          reconcileProjectState(value, refreshedProject, 'worldbook', id, refreshError),
           latestPreviewRequestVersion
-        );
-      });
+        )
+      );
     } catch (error) {
       state.update((value) => ({
         ...value,
@@ -566,33 +655,18 @@ export function createReviewWorkspaceController(
 
     try {
       const entries = await deps.deleteWorldBookEntry(current.project.id, id);
+      const { project: refreshedProject, refreshError } = await loadProjectSnapshot(
+        current.project,
+        'worldbook',
+        entries
+      );
       latestPreviewRequestVersion += 1;
-      state.update((value) => {
-        const reconciled = reconcileDraftMap(entries, value.drafts.worldbook, value.dirty.worldbook, null);
-        return markPreviewStale(
-          {
-            ...value,
-            project: {
-              ...value.project,
-              worldbook_entries: entries
-            },
-            activeSelection: {
-              ...value.activeSelection,
-              worldbook: selectionForItems(value.activeSelection.worldbook, entries)
-            },
-            drafts: {
-              ...value.drafts,
-              worldbook: reconciled.drafts
-            },
-            dirty: {
-              ...value.dirty,
-              worldbook: reconciled.dirty
-            },
-            deleteBusySection: null
-          },
+      state.update((value) =>
+        markPreviewStale(
+          reconcileProjectState(value, refreshedProject, 'worldbook', null, refreshError),
           latestPreviewRequestVersion
-        );
-      });
+        )
+      );
     } catch (error) {
       state.update((value) => ({
         ...value,
@@ -617,33 +691,18 @@ export function createReviewWorkspaceController(
 
     try {
       const rules = await deps.upsertRule(current.project.id, clone(draft));
+      const { project: refreshedProject, refreshError } = await loadProjectSnapshot(
+        current.project,
+        'rules',
+        rules
+      );
       latestPreviewRequestVersion += 1;
-      state.update((value) => {
-        const reconciled = reconcileDraftMap(rules, value.drafts.rules, value.dirty.rules, id);
-        return markPreviewStale(
-          {
-            ...value,
-            project: {
-              ...value.project,
-              rules
-            },
-            activeSelection: {
-              ...value.activeSelection,
-              rules: selectionForItems(value.activeSelection.rules, rules, id)
-            },
-            drafts: {
-              ...value.drafts,
-              rules: reconciled.drafts
-            },
-            dirty: {
-              ...value.dirty,
-              rules: reconciled.dirty
-            },
-            saveBusySection: null
-          },
+      state.update((value) =>
+        markPreviewStale(
+          reconcileProjectState(value, refreshedProject, 'rules', id, refreshError),
           latestPreviewRequestVersion
-        );
-      });
+        )
+      );
     } catch (error) {
       state.update((value) => ({
         ...value,
@@ -666,33 +725,18 @@ export function createReviewWorkspaceController(
 
     try {
       const rules = await deps.deleteRule(current.project.id, id);
+      const { project: refreshedProject, refreshError } = await loadProjectSnapshot(
+        current.project,
+        'rules',
+        rules
+      );
       latestPreviewRequestVersion += 1;
-      state.update((value) => {
-        const reconciled = reconcileDraftMap(rules, value.drafts.rules, value.dirty.rules, null);
-        return markPreviewStale(
-          {
-            ...value,
-            project: {
-              ...value.project,
-              rules
-            },
-            activeSelection: {
-              ...value.activeSelection,
-              rules: selectionForItems(value.activeSelection.rules, rules)
-            },
-            drafts: {
-              ...value.drafts,
-              rules: reconciled.drafts
-            },
-            dirty: {
-              ...value.dirty,
-              rules: reconciled.dirty
-            },
-            deleteBusySection: null
-          },
+      state.update((value) =>
+        markPreviewStale(
+          reconcileProjectState(value, refreshedProject, 'rules', null, refreshError),
           latestPreviewRequestVersion
-        );
-      });
+        )
+      );
     } catch (error) {
       state.update((value) => ({
         ...value,

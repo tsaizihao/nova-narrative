@@ -134,6 +134,47 @@ describe('mockBackend import/build flow', () => {
     await expect(mockBackend.get_current_scene(session.session_id)).rejects.toThrow();
   });
 
+  it('preserves canon world rules after deleting the last editable rule', async () => {
+    await mockBackend.save_ai_settings({
+      selected_provider: 'heuristic',
+      openai_compatible: {
+        base_url: '',
+        model: ''
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: ''
+      }
+    });
+
+    const project = await mockBackend.create_project('临川夜话');
+    await mockBackend.import_novel_text(
+      project.id,
+      ['第1章 雨夜', '', '沈砚听见了钟声。'].join('\n')
+    );
+    await mockBackend.build_story_package(project.id);
+
+    const built = await mockBackend.get_project(project.id);
+    expect(built.rules.length).toBeGreaterThan(0);
+
+    for (const rule of built.rules.slice(0, -1)) {
+      await mockBackend.delete_rule(project.id, rule.id);
+    }
+
+    const beforeLastDelete = await mockBackend.get_project(project.id);
+    const expectedWorldRules = beforeLastDelete.story_package?.story_bible.world_rules ?? [];
+    expect(expectedWorldRules.length).toBeGreaterThan(0);
+
+    const lastRuleId = beforeLastDelete.rules[0]?.id;
+    expect(lastRuleId).toBeTruthy();
+    await mockBackend.delete_rule(project.id, lastRuleId!);
+
+    const afterDelete = await mockBackend.get_project(project.id);
+    expect(afterDelete.rules).toHaveLength(0);
+    expect(afterDelete.story_package?.story_bible.world_rules).toEqual(expectedWorldRules);
+    expect(afterDelete.adaptation_kernel?.world_rules).toEqual(expectedWorldRules);
+  });
+
   it('persists failed build status when external provider configuration is incomplete', async () => {
     const project = await mockBackend.create_project('临川夜话');
     await mockBackend.import_novel_text(
