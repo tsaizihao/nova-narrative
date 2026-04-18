@@ -15,11 +15,11 @@
   let activeTab: 'characters' | 'lore' | 'timeline' | 'choices' = 'lore';
 </script>
 
-<aside class="rail-panel">
-  <div class="rail-head">
+<section class="drawer-panel" data-tone="paper">
+  <div class="panel-head">
     <div>
-      <p class="eyebrow">World</p>
-      <h3>世界侧栏</h3>
+      <p class="eyebrow">Appendix</p>
+      <h3>世界设定</h3>
     </div>
     <p>{session?.visited_scenes.length ?? 0} 个场景</p>
   </div>
@@ -101,21 +101,22 @@
       </article>
     </div>
   {/if}
-</aside>
+</section>
 
 <style>
-  .rail-panel {
+  .drawer-panel {
     display: grid;
     gap: 14px;
     align-content: start;
-    padding: 18px;
-    border-radius: 24px;
-    border: 1px solid var(--reader-border, rgba(255, 243, 214, 0.08));
-    background: var(--reader-shell-surface, rgba(12, 11, 15, 0.88));
-    box-shadow: var(--reader-shadow, 0 18px 36px rgba(70, 54, 39, 0.08));
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(121, 103, 81, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(246, 238, 226, 0.94)),
+      rgba(248, 243, 234, 0.96);
   }
 
-  .rail-head {
+  .panel-head {
     display: flex;
     justify-content: space-between;
     gap: 12px;
@@ -131,7 +132,7 @@
   }
 
   h3,
-  .rail-head p,
+  .panel-head p,
   .empty {
     margin: 0;
   }
@@ -142,7 +143,7 @@
     font-size: 1.35rem;
   }
 
-  .rail-head p,
+  .panel-head p,
   .empty {
     color: var(--reader-muted, rgba(63, 47, 35, 0.64));
     font-size: 0.8rem;
@@ -181,9 +182,9 @@
   }
 
   article {
-    padding: 14px;
+    padding: 12px;
     border-radius: 16px;
-    background: var(--reader-card-surface, rgba(255, 248, 230, 0.05));
+    background: rgba(255, 252, 246, 0.92);
     border: 1px solid var(--reader-border, rgba(121, 103, 81, 0.14));
   }
 

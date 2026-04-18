@@ -3,6 +3,7 @@
 
   export let title = '';
   export let open = false;
+  export let side: 'left' | 'right' = 'right';
 
   const dispatch = createEventDispatcher<{ close: void }>();
   let drawerElement: HTMLDivElement | null = null;
@@ -23,11 +24,12 @@
 </script>
 
 {#if open}
-  <div class="overlay">
+  <div class="overlay" data-side={side}>
     <button type="button" class="scrim" aria-label={`关闭${title}`} on:click={closeDrawer}></button>
     <div
       bind:this={drawerElement}
       class="drawer"
+      data-side={side}
       data-tone="paper"
       role="dialog"
       aria-label={title}
@@ -37,7 +39,7 @@
     >
       <header>
         <strong>{title}</strong>
-        <button type="button" aria-label="关闭" on:click={closeDrawer}>关闭</button>
+        <button type="button" class="close-button" aria-label="关闭" on:click={closeDrawer}>关闭</button>
       </header>
       <div class="drawer-body">
         <slot />
@@ -53,8 +55,16 @@
     z-index: 40;
     display: flex;
     align-items: stretch;
-    justify-content: stretch;
+    justify-content: flex-end;
     padding: 16px;
+  }
+
+  .overlay[data-side='left'] {
+    justify-content: flex-start;
+  }
+
+  .overlay[data-side='right'] {
+    justify-content: flex-end;
   }
 
   .scrim {
@@ -70,7 +80,6 @@
     position: relative;
     z-index: 1;
     width: min(100%, 420px);
-    margin-left: auto;
     display: grid;
     grid-template-rows: auto 1fr;
     border-radius: 24px;
@@ -95,7 +104,7 @@
     font-size: 1rem;
   }
 
-  button {
+  .close-button {
     min-height: 34px;
     padding: 0 12px;
     border: 1px solid rgba(121, 103, 81, 0.12);

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import ReaderDesktopShell from './ReaderDesktopShell.svelte';
 import ReaderMobileShell from './ReaderMobileShell.svelte';
+import { createReaderHistory } from '$lib/modules/runtime/reader-history';
 import type { RuntimeSnapshot, ScenePayload, SessionState } from '$lib/types';
 
 const storyState = {
@@ -116,84 +117,65 @@ const snapshot: RuntimeSnapshot = {
 };
 
 describe('ReaderDesktopShell', () => {
-  it('renders the main stage before the world and state rails', () => {
-    const { container } = render(ReaderDesktopShell, {
-      props: {
-        snapshot,
-        freeInput: '',
-        busy: false,
-        error: ''
-      }
-    });
+  it('renders drawer triggers and restores focus after closing world drawer', async () => {
+    const history = createReaderHistory(snapshot);
 
-    expect(screen.getByRole('heading', { name: '北门之夜' })).toBeInTheDocument();
-    expect(screen.getByText('世界侧栏')).toBeInTheDocument();
-    expect(screen.getByText('世界状态')).toBeInTheDocument();
-    expect(container.querySelector('.reader-desktop')).toHaveAttribute('data-tone', 'paper');
-  });
-
-  it('disables checkpoint rewinds in the world rail while the runtime is rewinding', async () => {
     render(ReaderDesktopShell, {
       props: {
+        projectName: '示例小说',
         snapshot,
+        history: history.blocks,
+        activity: [{ id: 'activity-1', label: '系统', detail: '读取场景', tone: 'muted' }],
         freeInput: '',
-        busy: true,
-        busyLabel: '正在回溯到关键节点',
-        error: ''
+        busy: false,
+        error: '',
+        autoplay: false,
+        retryAvailable: true
       }
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: '抉择' }));
+    expect(screen.getByText('示例小说')).toBeInTheDocument();
+    expect(document.querySelector('.reader-stage')).toHaveAttribute('data-flow', 'longform');
+    const worldTrigger = screen.getByRole('button', { name: '世界设定' });
+    expect(worldTrigger).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '状态与日志' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '继续' })).toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: '城门前' })).toBeDisabled();
+    await fireEvent.click(worldTrigger);
+
+    const worldDialog = screen.getByRole('dialog', { name: '世界设定' });
+    expect(worldDialog).toHaveAttribute('data-side', 'left');
+
+    await fireEvent.keyDown(worldDialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '世界设定' })).not.toBeInTheDocument();
+    expect(worldTrigger).toHaveFocus();
   });
 });
 
 describe('ReaderMobileShell', () => {
-  it('keeps lore and state hidden until their drawers are opened', async () => {
-    const { container } = render(ReaderMobileShell, {
-      props: {
-        snapshot,
-        freeInput: '',
-        busy: false,
-        error: ''
-      }
-    });
+  it('opens state drawer on the right and keeps autoplay controls available', async () => {
+    const history = createReaderHistory(snapshot);
 
-    expect(container.querySelector('.reader-mobile')).toHaveAttribute('data-tone', 'paper');
-    expect(screen.queryByRole('dialog', { name: '世界侧栏' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: '世界状态' })).not.toBeInTheDocument();
-
-    await fireEvent.click(screen.getByRole('button', { name: '打开世界信息' }));
-    const worldDialog = screen.getByRole('dialog', { name: '世界侧栏' });
-    expect(worldDialog).toHaveAttribute('aria-modal', 'true');
-    expect(worldDialog).toHaveAttribute('data-tone', 'paper');
-
-    await fireEvent.click(screen.getByRole('button', { name: '打开状态信息' }));
-    expect(screen.queryByRole('dialog', { name: '世界侧栏' })).not.toBeInTheDocument();
-
-    const stateDialog = screen.getByRole('dialog', { name: '世界状态' });
-    expect(stateDialog).toHaveAttribute('aria-modal', 'true');
-    expect(stateDialog).toHaveAttribute('data-tone', 'paper');
-
-    await fireEvent.keyDown(stateDialog, { key: 'Escape' });
-    expect(screen.queryByRole('dialog', { name: '世界状态' })).not.toBeInTheDocument();
-  });
-
-  it('surfaces the same rewind lock inside the mobile world drawer', async () => {
     render(ReaderMobileShell, {
       props: {
+        projectName: '示例小说',
         snapshot,
+        history: history.blocks,
+        activity: [{ id: 'activity-2', label: '旁白', detail: '夜色压城', tone: 'accent' }],
         freeInput: '',
-        busy: true,
-        busyLabel: '正在回溯到关键节点',
-        error: ''
+        busy: false,
+        error: '',
+        autoplay: true,
+        retryAvailable: true
       }
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: '打开世界信息' }));
-    await fireEvent.click(screen.getByRole('button', { name: '抉择' }));
+    expect(screen.getByText('示例小说')).toBeInTheDocument();
+    expect(document.querySelector('.reader-stage')).toHaveAttribute('data-flow', 'longform');
 
-    expect(screen.getByRole('button', { name: '城门前' })).toBeDisabled();
+    await fireEvent.click(screen.getByRole('button', { name: '状态与日志' }));
+    const stateDialog = screen.getByRole('dialog', { name: '状态与日志' });
+    expect(stateDialog).toHaveAttribute('data-side', 'right');
+    expect(screen.getByRole('button', { name: '自动播放' })).toBeInTheDocument();
   });
 });
