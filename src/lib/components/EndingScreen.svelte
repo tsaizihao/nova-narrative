@@ -11,14 +11,16 @@
   const dispatch = createEventDispatcher<{ rewind: string; finish: void }>();
 </script>
 
-<section class="ending" data-tone="paper">
-  <div class="hero">
-    <p class="eyebrow">Ending Report</p>
-    <h2>{ending.ending_type}</h2>
-    <p>{ending.summary}</p>
-  </div>
+<section class="ending-shell" data-tone="paper">
+  <header class="reader-head">
+    <div class="head-main">
+      <p class="eyebrow">Ending</p>
+      <h2>{ending.ending_type}</h2>
+      <p class="summary">{ending.summary}</p>
+    </div>
+  </header>
 
-  <div class="columns">
+  <div class="paper-sheet columns">
     <article>
       <strong>决定性转折</strong>
       <ul>
@@ -37,7 +39,7 @@
     </article>
   </div>
 
-  <div class="rewind">
+  <div class="paper-sheet rewind">
     <strong>从关键节点重写命运</strong>
     <p class="rewind-copy">你可以带着刚刚得到的结局理解，回到任一关键节点重写命运。</p>
     {#if session.status === 'finished'}
@@ -65,7 +67,7 @@
 </section>
 
 <style>
-  .ending {
+  .ending-shell {
     --reader-shell-surface: rgba(248, 243, 234, 0.96);
     --reader-panel-surface: rgba(253, 250, 245, 0.96);
     --reader-card-surface: rgba(244, 236, 225, 0.82);
@@ -80,19 +82,36 @@
     --reader-accent-soft: rgba(31, 106, 87, 0.14);
     --reader-warm-accent: #9b6d39;
     display: grid;
-    gap: 24px;
-    padding: 36px;
-    border-radius: 30px;
+    gap: 16px;
+  }
+
+  .reader-head {
+    padding: 20px 22px;
+    border-radius: 24px;
     border: 1px solid var(--reader-border);
     background:
-      radial-gradient(circle at top left, rgba(215, 194, 166, 0.32), transparent 42%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(244, 236, 225, 0.7)),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(244, 236, 225, 0.82)),
       var(--reader-shell-surface);
     box-shadow: var(--reader-shadow);
   }
 
+  .head-main {
+    display: grid;
+    gap: 8px;
+  }
+
+  .paper-sheet {
+    padding: 22px;
+    border-radius: 24px;
+    border: 1px solid rgba(121, 103, 81, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 238, 226, 0.96)),
+      rgba(248, 243, 234, 0.98);
+    box-shadow: 0 18px 36px rgba(70, 54, 39, 0.08);
+  }
+
   .eyebrow {
-    margin: 0 0 10px;
+    margin: 0;
     color: var(--reader-eyebrow);
     text-transform: uppercase;
     letter-spacing: 0.22em;
@@ -106,7 +125,7 @@
     color: var(--reader-title);
   }
 
-  .hero p:last-child {
+  .summary {
     margin: 0;
     line-height: 1.8;
     color: var(--reader-body);
@@ -119,9 +138,8 @@
     gap: 18px;
   }
 
-  article,
-  .rewind {
-    padding: 22px;
+  article {
+    padding: 20px;
     border-radius: 22px;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(248, 241, 231, 0.86)),

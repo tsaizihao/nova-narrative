@@ -469,8 +469,13 @@ describe('+page build flow', () => {
     await fireEvent.click(screen.getByRole('button', { name: '进入互动故事' }));
 
     await waitFor(() => {
-      expect(screen.getByText('北门之夜')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '北门之夜', level: 1 })).toBeInTheDocument();
     });
+    expect(screen.getAllByText('示例小说').length).toBeGreaterThan(0);
+    const readerStage = document.querySelector('.reader-stage');
+    expect(readerStage).not.toBeNull();
+    expect(readerStage).toHaveAttribute('data-flow', 'longform');
+    expect(screen.getByRole('button', { name: '自动播放' })).toBeInTheDocument();
     expect(mocks.runtimeBackend.startSession).toHaveBeenCalledWith('project-1');
     expect(mocks.runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledWith('session-1');
     expect(screen.queryByTestId('review-stage-shell')).not.toBeInTheDocument();
@@ -528,14 +533,14 @@ describe('+page build flow', () => {
     await screen.findByTestId('review-stage-shell');
 
     await fireEvent.click(screen.getByRole('button', { name: '进入互动故事' }));
-    await screen.findByRole('heading', { name: '北门之夜' });
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
 
     await fireEvent.click(screen.getByRole('button', { name: '返回审阅台' }));
     await screen.findByTestId('review-stage-shell');
     expect(screen.getByRole('button', { name: '继续互动故事' })).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: '继续互动故事' }));
-    await screen.findByRole('heading', { name: '北门之夜' });
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
 
     expect(mocks.runtimeBackend.startSession).toHaveBeenCalledTimes(1);
     expect(mocks.runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledTimes(2);
@@ -596,7 +601,7 @@ describe('+page build flow', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: '继续互动故事' }));
 
-    await screen.findByRole('heading', { name: '北门之夜' });
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
     expect(mocks.runtimeBackend.startSession).not.toHaveBeenCalled();
     expect(mocks.runtimeBackend.findProjectSession).toHaveBeenCalledWith('project-1');
     expect(mocks.runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledWith('session-resume');
@@ -750,7 +755,7 @@ describe('+page build flow', () => {
     await screen.findByText('继续已有项目');
     await fireEvent.click(screen.getByRole('button', { name: '继续互动示例小说' }));
 
-    await screen.findByRole('heading', { name: '北门之夜' });
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
     expect(mocks.runtimeBackend.startSession).not.toHaveBeenCalled();
     expect(mocks.runtimeBackend.findProjectSession).not.toHaveBeenCalled();
     expect(mocks.runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledWith('session-resume');

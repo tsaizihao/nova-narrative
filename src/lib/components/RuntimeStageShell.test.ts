@@ -95,6 +95,39 @@ function createSnapshot(overrides: Partial<RuntimeSnapshot> = {}): RuntimeSnapsh
   };
 }
 
+function createSceneSnapshot(sceneId: string, title: string, overrides: Partial<RuntimeSnapshot> = {}) {
+  return createSnapshot({
+    payload: {
+      ...createSnapshot().payload,
+      scene: {
+        ...createSnapshot().payload.scene,
+        id: sceneId,
+        chapter: sceneId === 'scene-1' ? 1 : 2,
+        title,
+        summary: `${title} 摘要`,
+        narration: [`${title} 第一段`],
+        allow_free_input: true
+      },
+      session: {
+        ...createSnapshot().payload.session,
+        current_scene_id: sceneId,
+        visited_scenes: sceneId === 'scene-1' ? ['scene-1'] : ['scene-1', sceneId],
+        story_state: {
+          ...createSnapshot().payload.session.story_state,
+          current_scene_id: sceneId,
+          visited_scenes: sceneId === 'scene-1' ? ['scene-1'] : ['scene-1', sceneId]
+        }
+      },
+      story_state: {
+        ...createSnapshot().payload.story_state,
+        current_scene_id: sceneId,
+        visited_scenes: sceneId === 'scene-1' ? ['scene-1'] : ['scene-1', sceneId]
+      }
+    },
+    ...overrides
+  });
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -125,7 +158,7 @@ describe('RuntimeStageShell', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '北门之夜' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '北门之夜', level: 1 })).toBeInTheDocument();
     });
     expect(runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledWith('session-1');
     expect(container.querySelector('.reader-desktop')).toBeInTheDocument();
@@ -143,10 +176,11 @@ describe('RuntimeStageShell', () => {
       }
     });
 
-    await screen.findByRole('heading', { name: '北门之夜' });
-    await fireEvent.click(screen.getByRole('button', { name: '前往北门' }));
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
+    await fireEvent.click(screen.getByRole('button', { name: '继续' }));
 
     const feedbackLane = await screen.findByTestId('runtime-feedback-lane');
+    expect(within(feedbackLane).getByText('Reader')).toBeInTheDocument();
     expect(within(feedbackLane).getByText('正在推进剧情')).toBeInTheDocument();
 
     pending.resolve();
@@ -172,7 +206,7 @@ describe('RuntimeStageShell', () => {
 
     await fireEvent.click(screen.getByRole('button', { name: '重新载入当前场景' }));
 
-    await screen.findByRole('heading', { name: '北门之夜' });
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
     expect(runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledTimes(2);
   });
 
@@ -189,10 +223,11 @@ describe('RuntimeStageShell', () => {
       }
     });
 
-    await screen.findByRole('heading', { name: '北门之夜' });
-    await fireEvent.click(screen.getByRole('button', { name: '前往北门' }));
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
+    await fireEvent.click(screen.getByRole('button', { name: '继续' }));
 
     const feedbackLane = await screen.findByTestId('runtime-feedback-lane');
+    expect(within(feedbackLane).getByText('Reader')).toBeInTheDocument();
     expect(within(feedbackLane).getByText('choice failed')).toBeInTheDocument();
 
     await fireEvent.click(within(feedbackLane).getByRole('button', { name: '重新载入当前场景' }));
@@ -201,6 +236,92 @@ describe('RuntimeStageShell', () => {
       expect(screen.queryByTestId('runtime-feedback-lane')).not.toBeInTheDocument();
     });
     expect(runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it('appends the next scene into longform history instead of replacing the previous scene', async () => {
+    runtimeBackend.getRuntimeSnapshot
+      .mockResolvedValueOnce(createSceneSnapshot('scene-1', '北门之夜'))
+      .mockResolvedValueOnce(
+        createSceneSnapshot('scene-2', '第二幕', {
+          payload: {
+            ...createSceneSnapshot('scene-2', '第二幕').payload,
+            scene: {
+              ...createSceneSnapshot('scene-2', '第二幕').payload.scene,
+              allow_free_input: false
+            }
+          }
+        })
+      );
+    runtimeBackend.submitChoice.mockResolvedValue(undefined);
+
+    const { container } = render(RuntimeStageShell, {
+      props: {
+        sessionId: 'session-1',
+        layoutMode: 'desktop'
+      }
+    });
+
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
+    await fireEvent.click(screen.getByRole('button', { name: '继续' }));
+    await screen.findByRole('heading', { name: '第二幕', level: 1 });
+
+    await waitFor(() => {
+      const sceneBlocks = container.querySelectorAll('.scene-block');
+      expect(sceneBlocks).toHaveLength(2);
+      expect(sceneBlocks[0]).toHaveTextContent('北门之夜');
+      expect(sceneBlocks[1]).toHaveTextContent('第二幕');
+    });
+  });
+
+  it('turns autoplay off when a drawer opens', async () => {
+    runtimeBackend.getRuntimeSnapshot.mockResolvedValue(createSceneSnapshot('scene-1', '北门之夜'));
+
+    render(RuntimeStageShell, {
+      props: {
+        sessionId: 'session-1',
+        layoutMode: 'desktop'
+      }
+    });
+
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
+    const autoplayButton = screen.getByRole('button', { name: '自动播放' });
+    expect(autoplayButton).toHaveAttribute('aria-pressed', 'false');
+
+    await fireEvent.click(autoplayButton);
+    await waitFor(() => {
+      expect(autoplayButton).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '世界设定' }));
+    expect(autoplayButton).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('retries the last failed story action from the dock', async () => {
+    runtimeBackend.getRuntimeSnapshot.mockResolvedValue(createSceneSnapshot('scene-1', '北门之夜'));
+    runtimeBackend.submitChoice
+      .mockRejectedValueOnce(new Error('choice failed'))
+      .mockResolvedValueOnce(undefined);
+
+    render(RuntimeStageShell, {
+      props: {
+        sessionId: 'session-1',
+        layoutMode: 'desktop'
+      }
+    });
+
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
+    await fireEvent.click(screen.getByRole('button', { name: '继续' }));
+
+    await screen.findByRole('status');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '重试' })).not.toBeDisabled();
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    await waitFor(() => {
+      expect(runtimeBackend.submitChoice).toHaveBeenNthCalledWith(1, 'session-1', 'choice-1');
+      expect(runtimeBackend.submitChoice).toHaveBeenNthCalledWith(2, 'session-1', 'choice-1');
+    });
   });
 
   it('dispatches a review-return action without reloading the runtime snapshot', async () => {
@@ -217,7 +338,7 @@ describe('RuntimeStageShell', () => {
       }
     });
 
-    await screen.findByRole('heading', { name: '北门之夜' });
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
     await fireEvent.click(screen.getByRole('button', { name: '返回审阅台' }));
 
     expect(exitReader).toHaveBeenCalledTimes(1);
@@ -262,6 +383,7 @@ describe('RuntimeStageShell', () => {
     });
 
     await screen.findByRole('heading', { name: '守门者结局' });
+    expect(screen.getByText('Ending')).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: '完成本轮互动' }));
 
     expect(runtimeBackend.finishSession).toHaveBeenCalledWith('session-1');

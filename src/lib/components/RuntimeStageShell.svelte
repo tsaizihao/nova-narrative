@@ -8,6 +8,12 @@
   import ReaderDesktopShell from './ReaderDesktopShell.svelte';
   import ReaderMobileShell from './ReaderMobileShell.svelte';
   import {
+    appendReaderSnapshot,
+    createReaderHistory,
+    resetReaderHistory,
+    type ReaderHistoryState
+  } from '$lib/modules/runtime/reader-history';
+  import {
     createRuntimeWorkspaceController,
     type RuntimeWorkspaceController,
     type RuntimeWorkspaceState
@@ -15,6 +21,7 @@
 
   export let sessionId: string;
   export let layoutMode: ReaderLayoutMode = 'desktop';
+  export let projectName = '';
 
   const dispatch = createEventDispatcher<{
     exitReader: void;
@@ -24,47 +31,266 @@
   let workspaceState: RuntimeWorkspaceState | null = null;
   let unsubscribe: Unsubscriber | null = null;
   let activeSessionId = '';
+  let historyState: ReaderHistoryState | null = null;
+  let history = historyState?.blocks ?? [];
+  let activity: Array<{
+    id: string;
+    label: string;
+    detail: string;
+    tone: 'muted' | 'accent' | 'danger';
+  }> = [];
+  let activityCounter = 0;
+  let retryAction: { kind: 'choice'; choiceId: string } | { kind: 'free-input'; text: string } | null = null;
+  let pendingAction: {
+    kind: 'choice' | 'free-input';
+    label: string;
+    detail: string;
+    retryAction: { kind: 'choice'; choiceId: string } | { kind: 'free-input'; text: string };
+  } | null = null;
+  let autoplay = false;
+  let autoplayTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastSnapshotRef: RuntimeWorkspaceState['snapshot'] = null;
+  let lastSceneId: string | null = null;
+  let pendingHistoryReset = false;
+
+  const MAX_ACTIVITY_ITEMS = 6;
+  const AUTOPLAY_DELAY_MS = 900;
+
+  function pushActivity(
+    item: Omit<(typeof activity)[number], 'id'> & {
+      id?: string;
+    }
+  ) {
+    const nextItem = {
+      id: item.id ?? `activity-${++activityCounter}`,
+      label: item.label,
+      detail: item.detail,
+      tone: item.tone
+    };
+    activity = [nextItem, ...activity].slice(0, MAX_ACTIVITY_ITEMS);
+  }
+
+  function clearAutoplayTimer() {
+    if (!autoplayTimer) return;
+    clearTimeout(autoplayTimer);
+    autoplayTimer = null;
+  }
 
   function attachWorkspace(nextSessionId: string) {
+    clearAutoplayTimer();
     unsubscribe?.();
     workspace = createRuntimeWorkspaceController(nextSessionId);
     unsubscribe = workspace.subscribe((value) => {
       workspaceState = value;
     });
     activeSessionId = nextSessionId;
+    historyState = null;
+    history = [];
+    activity = [];
+    activityCounter = 0;
+    retryAction = null;
+    pendingAction = null;
+    pendingHistoryReset = false;
+    autoplay = false;
+    lastSnapshotRef = null;
+    lastSceneId = null;
     void workspace.load();
   }
 
-  function withWorkspace(action: (controller: RuntimeWorkspaceController) => void | Promise<void>) {
+  async function withWorkspace(
+    action: (controller: RuntimeWorkspaceController) => void | Promise<void>
+  ) {
     if (!workspace) return;
-    void action(workspace);
+    await action(workspace);
+  }
+
+  function canAutoplayNow() {
+    const snapshot = workspaceState?.snapshot;
+    if (!snapshot || !autoplay || !workspaceState) return false;
+    if (workspaceState.busy || Boolean(workspaceState.error)) return false;
+
+    const choices = snapshot.payload.scene.candidate_choices;
+    return choices.length === 1 && snapshot.payload.scene.allow_free_input === false;
+  }
+
+  function scheduleAutoplay() {
+    if (autoplayTimer || !canAutoplayNow()) return;
+    autoplayTimer = setTimeout(() => {
+      autoplayTimer = null;
+      if (!canAutoplayNow()) return;
+      const autoChoiceId = workspaceState?.snapshot?.payload.scene.candidate_choices[0]?.id;
+      if (!autoChoiceId) return;
+      triggerChoice(autoChoiceId, '自动推进');
+    }, AUTOPLAY_DELAY_MS);
+  }
+
+  function scrollCurrentSceneIntoView() {
+    if (typeof document === 'undefined') return;
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>('.reader-stage .scene-block[data-current="true"]')
+        ?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   function reloadSnapshot() {
-    withWorkspace((controller) => controller.load());
+    pushActivity({
+      label: '系统',
+      detail: '重新载入当前场景',
+      tone: 'muted'
+    });
+    void withWorkspace((controller) => controller.load());
+  }
+
+  function updateFreeInput(value: string) {
+    void withWorkspace((controller) => controller.updateFreeInput(value));
+  }
+
+  function rewindToCheckpoint(checkpointId: string) {
+    pendingHistoryReset = true;
+    void withWorkspace((controller) => controller.rewind(checkpointId));
+  }
+
+  function setAutoplay(nextValue: boolean) {
+    if (autoplay === nextValue) return;
+    autoplay = nextValue;
+    if (!autoplay) {
+      clearAutoplayTimer();
+    } else {
+      scheduleAutoplay();
+    }
+  }
+
+  function toggleAutoplay() {
+    setAutoplay(!autoplay);
+    pushActivity({
+      label: '自动播放',
+      detail: autoplay ? '自动推进已开启' : '自动推进已关闭',
+      tone: 'muted'
+    });
+  }
+
+  function clearInput() {
+    if (!workspaceState?.freeInput.trim()) return;
+    void withWorkspace((controller) => controller.updateFreeInput(''));
+    pushActivity({
+      label: '输入区',
+      detail: '已清除当前自由输入',
+      tone: 'muted'
+    });
+  }
+
+  function triggerChoice(choiceId: string, label: string) {
+    pendingAction = {
+      kind: 'choice',
+      label,
+      detail: `选择 ${choiceId}`,
+      retryAction: { kind: 'choice', choiceId }
+    };
+    clearAutoplayTimer();
+    void withWorkspace((controller) => controller.choose(choiceId));
+  }
+
+  function triggerFreeInput(textOverride?: string, label = '自由输入') {
+    const text = textOverride?.trim() ?? workspaceState?.freeInput.trim() ?? '';
+    if (!text) return;
+
+    pendingAction = {
+      kind: 'free-input',
+      label,
+      detail: text,
+      retryAction: { kind: 'free-input', text }
+    };
+    clearAutoplayTimer();
+    void (async () => {
+      if (textOverride != null) {
+        await withWorkspace((controller) => controller.updateFreeInput(text));
+      }
+      await withWorkspace((controller) => controller.submitFreeInput());
+    })();
+  }
+
+  function retryFailedAction() {
+    if (!retryAction || workspaceState?.busy) return;
+    if (retryAction.kind === 'choice') {
+      triggerChoice(retryAction.choiceId, '重试选择');
+      return;
+    }
+    triggerFreeInput(retryAction.text, '重试自由输入');
+  }
+
+  function overlayChange(event: CustomEvent<{ worldOpen: boolean; stateOpen: boolean }>) {
+    if (!event.detail.worldOpen && !event.detail.stateOpen) return;
+    if (!autoplay) return;
+    setAutoplay(false);
+    pushActivity({
+      label: '自动播放',
+      detail: '抽屉打开，自动推进已暂停',
+      tone: 'muted'
+    });
   }
 
   $: if (sessionId && sessionId !== activeSessionId) {
     attachWorkspace(sessionId);
   }
 
+  $: if (workspaceState?.snapshot && workspaceState.snapshot !== lastSnapshotRef) {
+    const snapshot = workspaceState.snapshot;
+    const currentSceneId = snapshot.payload.scene.id;
+    const sceneChanged = Boolean(lastSceneId && lastSceneId !== currentSceneId);
+    lastSnapshotRef = snapshot;
+    lastSceneId = currentSceneId;
+
+    historyState = pendingHistoryReset
+      ? resetReaderHistory(snapshot)
+      : historyState
+        ? appendReaderSnapshot(historyState, snapshot)
+        : createReaderHistory(snapshot);
+    history = historyState.blocks;
+    pendingHistoryReset = false;
+
+    if (sceneChanged) {
+      scrollCurrentSceneIntoView();
+    }
+  }
+
+  $: if (pendingAction && workspaceState && !workspaceState.busy) {
+    if (workspaceState.error) {
+      retryAction = pendingAction.retryAction;
+      pushActivity({
+        label: pendingAction.label,
+        detail: workspaceState.error,
+        tone: 'danger'
+      });
+    } else {
+      retryAction = null;
+      pushActivity({
+        label: pendingAction.label,
+        detail: pendingAction.detail,
+        tone: 'accent'
+      });
+    }
+    pendingAction = null;
+  }
+
+  $: if (!canAutoplayNow()) {
+    clearAutoplayTimer();
+  } else {
+    scheduleAutoplay();
+  }
+
   onDestroy(() => {
+    clearAutoplayTimer();
     unsubscribe?.();
   });
 </script>
 
 <div class="runtime-stage-shell" data-testid="runtime-stage-shell">
-  <div class="runtime-shell-actions">
-    <button type="button" class="runtime-nav-button" on:click={() => dispatch('exitReader')}>
-      返回审阅台
-    </button>
-  </div>
-
   {#if workspaceState?.status === 'loading' && !workspaceState.snapshot}
     <section class="runtime-state-card" data-testid="runtime-loading-state">
       <p class="eyebrow">Reader</p>
-      <h2>正在载入互动故事</h2>
-      <p>我们先把当前 session 的场景、世界信息和状态快照一起取回来。</p>
+      <h2>正在翻开故事页</h2>
+      <p>我们正在把当前 session 的场景、世界设定和状态脉络整理到同一页里。</p>
     </section>
   {:else if workspaceState?.snapshot}
     {#if workspaceState.busy || workspaceState.error}
@@ -74,7 +300,7 @@
         class:error={Boolean(workspaceState.error)}
         data-testid="runtime-feedback-lane"
       >
-        <p class="eyebrow">Runtime</p>
+        <p class="eyebrow">Reader</p>
         <strong>
           {#if workspaceState.busy}
             {workspaceState.busyLabel}
@@ -82,7 +308,7 @@
             动作处理失败
           {/if}
         </strong>
-        <p>
+        <p class="runtime-copy">
           {#if workspaceState.busy}
             当前场景和世界状态会在动作完成后一起刷新。
           {:else}
@@ -104,40 +330,61 @@
         busy={workspaceState.busy}
         busyLabel={workspaceState.busyLabel}
         on:finish={() => withWorkspace((controller) => controller.finish())}
-        on:rewind={(event) => withWorkspace((controller) => controller.rewind(event.detail))}
+        on:rewind={(event) => {
+          pendingHistoryReset = true;
+          void withWorkspace((controller) => controller.rewind(event.detail));
+        }}
       />
     {:else if layoutMode === 'desktop'}
       <ReaderDesktopShell
+        {projectName}
         snapshot={workspaceState.snapshot}
+        {history}
+        {activity}
         freeInput={workspaceState.freeInput}
         busy={workspaceState.busy}
         busyLabel={workspaceState.busyLabel}
         error={workspaceState.error}
-        on:choose={(event) => withWorkspace((controller) => controller.choose(event.detail))}
-        on:freeInputChange={(event) =>
-          withWorkspace((controller) => controller.updateFreeInput(event.detail))}
-        on:submitFreeInput={() => withWorkspace((controller) => controller.submitFreeInput())}
-        on:rewind={(event) => withWorkspace((controller) => controller.rewind(event.detail))}
+        {autoplay}
+        retryAvailable={Boolean(retryAction)}
+        on:exit={() => dispatch('exitReader')}
+        on:choose={(event) => triggerChoice(event.detail, '分支选择')}
+        on:freeInputChange={(event) => updateFreeInput(event.detail)}
+        on:submitFreeInput={() => triggerFreeInput()}
+        on:clearInput={clearInput}
+        on:retry={retryFailedAction}
+        on:toggleAutoplay={toggleAutoplay}
+        on:overlayChange={overlayChange}
+        on:rewind={(event) => rewindToCheckpoint(event.detail)}
       />
     {:else}
       <ReaderMobileShell
+        {projectName}
         snapshot={workspaceState.snapshot}
+        {history}
+        {activity}
         freeInput={workspaceState.freeInput}
         busy={workspaceState.busy}
         busyLabel={workspaceState.busyLabel}
         error={workspaceState.error}
-        on:choose={(event) => withWorkspace((controller) => controller.choose(event.detail))}
-        on:freeInputChange={(event) =>
-          withWorkspace((controller) => controller.updateFreeInput(event.detail))}
-        on:submitFreeInput={() => withWorkspace((controller) => controller.submitFreeInput())}
-        on:rewind={(event) => withWorkspace((controller) => controller.rewind(event.detail))}
+        {autoplay}
+        retryAvailable={Boolean(retryAction)}
+        on:exit={() => dispatch('exitReader')}
+        on:choose={(event) => triggerChoice(event.detail, '分支选择')}
+        on:freeInputChange={(event) => updateFreeInput(event.detail)}
+        on:submitFreeInput={() => triggerFreeInput()}
+        on:clearInput={clearInput}
+        on:retry={retryFailedAction}
+        on:toggleAutoplay={toggleAutoplay}
+        on:overlayChange={overlayChange}
+        on:rewind={(event) => rewindToCheckpoint(event.detail)}
       />
     {/if}
   {:else}
     <section class="runtime-state-card error" data-testid="runtime-error-state">
       <p class="eyebrow">Reader</p>
-      <h2>互动故事加载失败</h2>
-      <p>{workspaceState?.error ?? '当前 session 的运行时快照暂时不可用。'}</p>
+      <h2>这页故事暂时没能展开</h2>
+      <p class="runtime-copy">{workspaceState?.error ?? '当前 session 的运行时快照暂时不可用。'}</p>
       <button type="button" class="runtime-retry-button" on:click={reloadSnapshot}>
         重新载入当前场景
       </button>
@@ -151,12 +398,6 @@
     gap: 16px;
   }
 
-  .runtime-shell-actions {
-    display: flex;
-    justify-content: flex-start;
-  }
-
-  .runtime-nav-button,
   .runtime-retry-button {
     width: fit-content;
     min-height: 38px;
@@ -169,7 +410,6 @@
     cursor: pointer;
   }
 
-  .runtime-nav-button:hover,
   .runtime-retry-button:hover {
     border-color: rgba(31, 106, 87, 0.24);
     background: rgba(237, 245, 241, 0.92);
@@ -235,7 +475,7 @@
     color: #2f261d;
   }
 
-  p:last-child {
+  .runtime-copy {
     line-height: 1.7;
     color: rgba(47, 38, 29, 0.78);
   }

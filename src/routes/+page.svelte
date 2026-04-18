@@ -402,6 +402,7 @@
     {:else if phase === 'reader' && activeSessionId}
       <RuntimeStageShell
         sessionId={activeSessionId}
+        projectName={project?.name ?? projectName}
         layoutMode={readerLayoutMode}
         on:exitReader={returnToReview}
       />
