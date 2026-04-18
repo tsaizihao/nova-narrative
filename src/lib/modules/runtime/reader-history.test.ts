@@ -113,6 +113,8 @@ describe('reader-history', () => {
 
     expect(appended.blocks.map((block) => block.sceneId)).toEqual(['scene-1', 'scene-2']);
     expect(refreshed.blocks).toHaveLength(2);
+    expect(refreshed.currentSceneId).toBe('scene-2');
+    expect(refreshed.blocks[1].sceneId).toBe('scene-2');
     expect(refreshed.blocks[1].isCurrent).toBe(true);
     expect(refreshed.blocks[0].isCurrent).toBe(false);
   });
@@ -127,5 +129,6 @@ describe('reader-history', () => {
     expect(appended.blocks).toHaveLength(2);
     expect(reset.blocks).toHaveLength(1);
     expect(reset.blocks[0].sceneId).toBe('scene-1');
+    expect(reset.blocks[0].isCurrent).toBe(true);
   });
 });
