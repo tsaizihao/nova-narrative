@@ -27,6 +27,8 @@
 
   $: multipleChoices = scene.candidate_choices.length > 1;
   $: primaryChoice = scene.candidate_choices.length === 1 ? scene.candidate_choices[0] : null;
+  $: freeInputAllowed = scene.allow_free_input !== false;
+  $: submitDisabled = busy || !freeInputAllowed || !freeInput.trim();
 </script>
 
 <section class="reader-control-dock" data-tone="paper">
@@ -82,6 +84,9 @@
 
   <label class="dock-input">
     <span>以某角色身份发言，描述你的行动或接下来发生的事</span>
+    {#if !freeInputAllowed}
+      <small>当前场景只能按既定选项推进，自由输入会保留但暂不提交。</small>
+    {/if}
     <textarea
       value={freeInput}
       disabled={busy}
@@ -95,11 +100,13 @@
     <button
       type="button"
       class="submit-button"
-      disabled={busy || !freeInput.trim()}
+      disabled={submitDisabled}
       on:click={() => dispatch('submitFreeInput')}
     >
       {#if busy && busyLabel}
         {busyLabel}
+      {:else if !freeInputAllowed}
+        当前场景不接受自由输入
       {:else}
         把这句话写进故事
       {/if}
@@ -191,6 +198,12 @@
   .dock-input span {
     color: rgba(63, 47, 35, 0.68);
     font-size: 0.84rem;
+  }
+
+  .dock-input small {
+    color: rgba(155, 109, 57, 0.86);
+    font-size: 0.78rem;
+    line-height: 1.5;
   }
 
   .dock-input textarea {

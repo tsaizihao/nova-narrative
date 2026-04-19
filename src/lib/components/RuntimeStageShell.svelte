@@ -3,6 +3,7 @@
   import { onDestroy } from 'svelte';
   import type { Unsubscriber } from 'svelte/store';
 
+  import type { ChoiceOption } from '$lib/types';
   import type { ReaderLayoutMode } from '$lib/ui-layout';
   import EndingScreen from './EndingScreen.svelte';
   import ReaderDesktopShell from './ReaderDesktopShell.svelte';
@@ -104,13 +105,18 @@
     await action(workspace);
   }
 
+  function choiceUnlocked(choice: ChoiceOption) {
+    const ruleFlags = workspaceState?.snapshot?.payload.session.rule_flags ?? [];
+    return choice.unlock_conditions.every((condition) => ruleFlags.includes(condition));
+  }
+
   function canAutoplayNow() {
     const snapshot = workspaceState?.snapshot;
     if (!snapshot || !autoplay || !workspaceState) return false;
     if (workspaceState.busy || Boolean(workspaceState.error)) return false;
 
     const choices = snapshot.payload.scene.candidate_choices;
-    return choices.length === 1 && snapshot.payload.scene.allow_free_input === false;
+    return choices.length === 1 && snapshot.payload.scene.allow_free_input === false && choiceUnlocked(choices[0]);
   }
 
   function scheduleAutoplay() {
@@ -202,12 +208,10 @@
       retryAction: { kind: 'free-input', text }
     };
     clearAutoplayTimer();
-    void (async () => {
-      if (textOverride != null) {
-        await withWorkspace((controller) => controller.updateFreeInput(text));
-      }
-      await withWorkspace((controller) => controller.submitFreeInput());
-    })();
+    if (textOverride != null) {
+      workspace?.updateFreeInput(text);
+    }
+    void withWorkspace((controller) => controller.submitFreeInput());
   }
 
   function retryFailedAction() {

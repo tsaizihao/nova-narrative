@@ -296,6 +296,45 @@ describe('RuntimeStageShell', () => {
     expect(autoplayButton).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it('does not autoplay a single choice that is still locked', async () => {
+    vi.useFakeTimers();
+    runtimeBackend.getRuntimeSnapshot.mockResolvedValue(
+      createSceneSnapshot('scene-1', '北门之夜', {
+        payload: {
+          ...createSceneSnapshot('scene-1', '北门之夜').payload,
+          scene: {
+            ...createSceneSnapshot('scene-1', '北门之夜').payload.scene,
+            allow_free_input: false,
+            candidate_choices: [
+              {
+                id: 'choice-locked',
+                label: '打开城门',
+                intent_tag: 'open',
+                state_effects: [],
+                unlock_conditions: ['open-gate'],
+                next_scene_id: 'scene-2'
+              }
+            ]
+          }
+        }
+      })
+    );
+
+    render(RuntimeStageShell, {
+      props: {
+        sessionId: 'session-1',
+        layoutMode: 'desktop'
+      }
+    });
+
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
+    await fireEvent.click(screen.getByRole('button', { name: '自动播放' }));
+    await vi.advanceTimersByTimeAsync(1_200);
+
+    expect(runtimeBackend.submitChoice).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('retries the last failed story action from the dock', async () => {
     runtimeBackend.getRuntimeSnapshot.mockResolvedValue(createSceneSnapshot('scene-1', '北门之夜'));
     runtimeBackend.submitChoice
@@ -321,6 +360,35 @@ describe('RuntimeStageShell', () => {
     await waitFor(() => {
       expect(runtimeBackend.submitChoice).toHaveBeenNthCalledWith(1, 'session-1', 'choice-1');
       expect(runtimeBackend.submitChoice).toHaveBeenNthCalledWith(2, 'session-1', 'choice-1');
+    });
+  });
+
+  it('retries the last failed free-input action with the original text', async () => {
+    runtimeBackend.getRuntimeSnapshot.mockResolvedValue(createSceneSnapshot('scene-1', '北门之夜'));
+    runtimeBackend.submitFreeInput
+      .mockRejectedValueOnce(new Error('free input failed'))
+      .mockResolvedValueOnce(undefined);
+
+    render(RuntimeStageShell, {
+      props: {
+        sessionId: 'session-1',
+        layoutMode: 'desktop'
+      }
+    });
+
+    await screen.findByRole('heading', { name: '北门之夜', level: 1 });
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: '我先静观其变' } });
+    await fireEvent.click(screen.getByRole('button', { name: '把这句话写进故事' }));
+
+    await screen.findByRole('status');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '重试' })).not.toBeDisabled();
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '重试' }));
+
+    await waitFor(() => {
+      expect(runtimeBackend.submitFreeInput).toHaveBeenNthCalledWith(1, 'session-1', '我先静观其变');
+      expect(runtimeBackend.submitFreeInput).toHaveBeenNthCalledWith(2, 'session-1', '我先静观其变');
     });
   });
 

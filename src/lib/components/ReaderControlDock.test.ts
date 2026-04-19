@@ -206,7 +206,7 @@ describe('ReaderControlDock', () => {
     expect(screen.getByRole('textbox')).not.toBeDisabled();
   });
 
-  it('keeps free-input area rendered even when scene disallows free input', () => {
+  it('keeps free-input area rendered but blocks submission when scene disallows free input', () => {
     render(ReaderControlDock, {
       props: {
         scene: {
@@ -223,7 +223,7 @@ describe('ReaderControlDock', () => {
           allow_free_input: false
         },
         ruleFlags: [],
-        freeInput: '',
+        freeInput: '我还是先别开口',
         busy: false,
         busyLabel: '',
         error: '',
@@ -233,6 +233,7 @@ describe('ReaderControlDock', () => {
     });
 
     expect(screen.getByRole('textbox')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '把这句话写进故事' })).toBeDisabled();
+    const submitButton = screen.getByRole('button', { name: '当前场景不接受自由输入' });
+    expect(submitButton).toBeDisabled();
   });
 });
