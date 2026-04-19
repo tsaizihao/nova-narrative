@@ -75,7 +75,7 @@
   }
 </script>
 
-<section class="reader-desktop" data-tone="paper">
+<section class="reader-desktop" data-tone="paper" data-shell-layout="framed-bottom">
   <header class="reader-head">
     <div class="head-main">
       <p class="project-name">{projectName || '互动故事'}</p>
@@ -89,8 +89,11 @@
     </div>
   </header>
 
-  <div class="stage-column">
+  <div class="reader-body" data-reader-region="story-scroll">
     <ReaderStage blocks={history} {activity} />
+  </div>
+
+  <div class="reader-dock-shell" data-layout="stacked-bottom">
     <ReaderControlDock
       scene={snapshot.payload.scene}
       ruleFlags={snapshot.payload.session.rule_flags}
@@ -148,7 +151,9 @@
     --reader-warm-accent: #9b6d39;
     --reader-danger: #b14d3b;
     display: grid;
-    gap: 16px;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    min-height: calc(100vh - 56px);
   }
 
   .reader-head {
@@ -211,16 +216,29 @@
     cursor: pointer;
   }
 
-  .stage-column {
+  .reader-body {
     display: grid;
-    gap: 12px;
     min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .reader-dock-shell {
+    position: relative;
+    z-index: 10;
   }
 
   @media (max-width: 1200px) {
     .reader-head {
       flex-direction: column;
       align-items: stretch;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .reader-desktop {
+      min-height: calc(100vh - 36px);
     }
   }
 </style>

@@ -28,10 +28,11 @@
   $: multipleChoices = scene.candidate_choices.length > 1;
   $: primaryChoice = scene.candidate_choices.length === 1 ? scene.candidate_choices[0] : null;
   $: freeInputAllowed = scene.allow_free_input !== false;
+  $: inputMode = freeInputAllowed ? 'interactive' : 'staged';
   $: submitDisabled = busy || !freeInputAllowed || !freeInput.trim();
 </script>
 
-<section class="reader-control-dock" data-tone="paper">
+<section class="reader-control-dock" data-tone="paper" data-input-mode={inputMode}>
   <div class="dock-main">
     {#if multipleChoices}
       <div class="choice-row">
@@ -43,8 +44,10 @@
             disabled={busy || !choiceUnlocked(choice)}
             on:click={() => dispatch('choose', choice.id)}
           >
-            <strong>{choice.label}</strong>
-            <span>{choice.intent_tag}</span>
+            <span class="choice-copy">
+              <strong>{choice.label}</strong>
+              <small>{choice.intent_tag}</small>
+            </span>
           </button>
         {/each}
       </div>
@@ -83,47 +86,45 @@
   </div>
 
   <label class="dock-input">
-    <span>以某角色身份发言，描述你的行动或接下来发生的事</span>
     {#if !freeInputAllowed}
       <small>当前场景只能按既定选项推进，自由输入会保留但暂不提交。</small>
     {/if}
     <textarea
+      aria-label="自由输入"
+      rows={freeInputAllowed ? 3 : 1}
       value={freeInput}
       disabled={busy}
       maxlength="240"
       on:input={(event) => dispatch('freeInputChange', event.currentTarget.value)}
       placeholder="例如：我暂时不揭穿真相，先看对方接下来会做什么。"
     ></textarea>
+    {#if freeInputAllowed}
+      <div class="dock-input-actions">
+        <button
+          type="button"
+          class="submit-button"
+          disabled={submitDisabled}
+          on:click={() => dispatch('submitFreeInput')}
+        >
+          {#if busy && busyLabel}
+            {busyLabel}
+          {:else}
+            把这句话写进故事
+          {/if}
+        </button>
+      </div>
+    {/if}
   </label>
-
-  <div class="dock-submit">
-    <button
-      type="button"
-      class="submit-button"
-      disabled={submitDisabled}
-      on:click={() => dispatch('submitFreeInput')}
-    >
-      {#if busy && busyLabel}
-        {busyLabel}
-      {:else if !freeInputAllowed}
-        当前场景不接受自由输入
-      {:else}
-        把这句话写进故事
-      {/if}
-    </button>
-  </div>
 </section>
 
 <style>
   .reader-control-dock {
-    position: sticky;
-    bottom: 0;
-    z-index: 20;
     display: grid;
-    gap: 12px;
-    padding: 16px 18px 18px;
+    gap: 10px;
+    width: 100%;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
     border: 1px solid rgba(121, 103, 81, 0.14);
-    border-radius: 24px 24px 0 0;
+    border-radius: 24px;
     background:
       linear-gradient(180deg, rgba(255, 253, 249, 0.92), rgba(247, 239, 228, 0.98)),
       rgba(248, 243, 234, 0.98);
@@ -132,9 +133,9 @@
 
   .dock-main,
   .dock-secondary,
-  .dock-submit {
+  .dock-input-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
   }
 
@@ -164,12 +165,35 @@
   }
 
   .choice-button {
-    display: grid;
-    gap: 4px;
-    padding: 12px 14px;
-    justify-items: start;
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
     background: rgba(255, 250, 244, 0.94);
     color: #2f261d;
+  }
+
+  .choice-copy {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .choice-copy strong,
+  .choice-copy small {
+    display: block;
+  }
+
+  .choice-copy strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .choice-copy small {
+    color: rgba(145, 118, 93, 0.92);
+    font-size: 0.78rem;
+    text-transform: lowercase;
   }
 
   .dock-secondary button {
@@ -192,12 +216,7 @@
 
   .dock-input {
     display: grid;
-    gap: 8px;
-  }
-
-  .dock-input span {
-    color: rgba(63, 47, 35, 0.68);
-    font-size: 0.84rem;
+    gap: 6px;
   }
 
   .dock-input small {
@@ -208,14 +227,44 @@
 
   .dock-input textarea {
     width: 100%;
-    min-height: 92px;
-    resize: vertical;
+    min-height: 72px;
+    max-height: 164px;
+    resize: none;
+    overflow: auto;
     border-radius: 18px;
     border: 1px solid rgba(121, 103, 81, 0.14);
-    padding: 14px 16px;
+    padding: 12px 14px;
     background: rgba(255, 252, 248, 0.96);
     color: #2f261d;
     font: inherit;
-    line-height: 1.7;
+    line-height: 1.6;
+  }
+
+  .dock-input-actions {
+    justify-content: flex-end;
+  }
+
+  .reader-control-dock[data-input-mode='staged'] {
+    gap: 8px;
+  }
+
+  .reader-control-dock[data-input-mode='staged'] .dock-input textarea {
+    min-height: 52px;
+    padding-block: 10px;
+  }
+
+  @media (max-width: 900px) {
+    .reader-control-dock {
+      padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .dock-input textarea {
+      min-height: 64px;
+    }
+
+    .choice-copy {
+      gap: 6px;
+      flex-wrap: wrap;
+    }
   }
 </style>

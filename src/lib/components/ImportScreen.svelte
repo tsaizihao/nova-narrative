@@ -49,6 +49,7 @@
   let buildDisabled = false;
 
   const MIN_TEXTAREA_HEIGHT = 320;
+  const fieldBoxStyle = 'box-sizing: border-box; max-width: 100%;';
 
   const dispatch = createEventDispatcher<{
     submit: void;
@@ -201,6 +202,7 @@
       <label>
         <span>项目名称</span>
         <input
+          style={fieldBoxStyle}
           value={projectName}
           on:input={(event) => dispatch('updateProjectName', event.currentTarget.value)}
           placeholder="例如：临川夜话"
@@ -211,6 +213,7 @@
       <label>
         <span>小说正文</span>
         <textarea
+          style={fieldBoxStyle}
           bind:this={novelTextarea}
           value={novelText}
           on:input={handleNovelTextInput}
@@ -236,6 +239,7 @@
         <label>
           <span>接口类型</span>
           <select
+            style={fieldBoxStyle}
             value={selectedProvider}
             on:change={(event) => dispatch('updateAiProvider', event.currentTarget.value as AiProviderKind)}
             disabled={busy || settingsBusy}
@@ -251,6 +255,7 @@
             <label>
               <span>Base URL</span>
               <input
+                style={fieldBoxStyle}
                 value={activeDraft.base_url}
                 on:input={(event) => dispatch('updateAiBaseUrl', event.currentTarget.value)}
                 placeholder={selectedProvider === 'openrouter'
@@ -263,6 +268,7 @@
             <label>
               <span>模型</span>
               <input
+                style={fieldBoxStyle}
                 value={activeDraft.model}
                 on:input={(event) => dispatch('updateAiModel', event.currentTarget.value)}
                 placeholder={selectedProvider === 'openrouter' ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'}
@@ -274,6 +280,7 @@
           <label>
             <span>API key</span>
             <input
+              style={fieldBoxStyle}
               type="password"
               value={activeDraft.api_key ?? ''}
               on:input={(event) => dispatch('updateAiApiKey', event.currentTarget.value)}
@@ -588,6 +595,7 @@
   label {
     display: grid;
     gap: 10px;
+    min-width: 0;
   }
 
   label span {
@@ -598,7 +606,9 @@
   input,
   textarea,
   select {
+    box-sizing: border-box;
     width: 100%;
+    max-width: 100%;
     border: 1px solid rgba(121, 103, 81, 0.16);
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.92);

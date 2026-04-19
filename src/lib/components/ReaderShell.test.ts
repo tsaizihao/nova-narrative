@@ -141,6 +141,13 @@ describe('ReaderDesktopShell', () => {
     expect(within(desktopHeader as HTMLElement).getByRole('heading', { name: '北门之夜', level: 1 })).toBeInTheDocument();
     expect(within(desktopHeader as HTMLElement).getByText('第 1 章')).toBeInTheDocument();
     expect(document.querySelector('.reader-stage')).toHaveAttribute('data-flow', 'longform');
+    expect(document.querySelector('.reader-desktop')).toHaveAttribute('data-shell-layout', 'framed-bottom');
+    const readerBody = document.querySelector('.reader-body');
+    const dockShell = document.querySelector('.reader-dock-shell');
+    expect(readerBody).toHaveAttribute('data-reader-region', 'story-scroll');
+    expect(dockShell).toHaveAttribute('data-layout', 'stacked-bottom');
+    expect(readerBody?.contains(document.querySelector('.reader-stage'))).toBe(true);
+    expect(readerBody?.contains(dockShell as Node)).toBe(false);
     expect(screen.getByRole('button', { name: '返回审阅台' })).toBeInTheDocument();
     const worldTrigger = screen.getByRole('button', { name: '世界设定' });
     expect(worldTrigger).toBeInTheDocument();
@@ -215,6 +222,13 @@ describe('ReaderMobileShell', () => {
     expect(screen.getByText('示例小说')).toBeInTheDocument();
     expect(within(mobileHeader as HTMLElement).getByRole('heading', { name: '北门之夜', level: 1 })).toBeInTheDocument();
     expect(document.querySelector('.reader-stage')).toHaveAttribute('data-flow', 'longform');
+    expect(document.querySelector('.reader-mobile')).toHaveAttribute('data-shell-layout', 'framed-bottom');
+    const readerBody = document.querySelector('.reader-body');
+    const dockShell = document.querySelector('.reader-dock-shell');
+    expect(readerBody).toHaveAttribute('data-reader-region', 'story-scroll');
+    expect(dockShell).toHaveAttribute('data-layout', 'stacked-bottom');
+    expect(readerBody?.contains(document.querySelector('.reader-stage'))).toBe(true);
+    expect(readerBody?.contains(dockShell as Node)).toBe(false);
 
     await fireEvent.click(screen.getByRole('button', { name: '状态与日志' }));
     const stateDialog = screen.getByRole('dialog', { name: '状态与日志' });

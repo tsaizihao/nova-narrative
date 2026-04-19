@@ -52,6 +52,7 @@ describe('ReaderControlDock', () => {
 
     expect(screen.getByRole('button', { name: '继续' })).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toBeInTheDocument();
+    expect(screen.queryByText('以某角色身份发言，描述你的行动或接下来发生的事')).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: '继续' }));
     expect(choose).toHaveBeenCalledWith('choice-1');
@@ -232,8 +233,10 @@ describe('ReaderControlDock', () => {
       }
     });
 
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
-    const submitButton = screen.getByRole('button', { name: '当前场景不接受自由输入' });
-    expect(submitButton).toBeDisabled();
+    expect(document.querySelector('.reader-control-dock')).toHaveAttribute('data-input-mode', 'staged');
+    expect(screen.getByRole('textbox')).toHaveAttribute('rows', '1');
+    expect(screen.queryByText('以某角色身份发言，描述你的行动或接下来发生的事')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '当前场景不接受自由输入' })).not.toBeInTheDocument();
+    expect(screen.getByText('当前场景只能按既定选项推进，自由输入会保留但暂不提交。')).toBeInTheDocument();
   });
 });

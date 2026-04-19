@@ -71,11 +71,14 @@
 <style>
   .reader-stage {
     min-width: 0;
+    height: 100%;
   }
 
   .paper-sheet {
     display: grid;
+    align-content: start;
     gap: 24px;
+    min-height: 100%;
     padding: 24px clamp(18px, 3vw, 42px) 32px;
     border: 1px solid rgba(121, 103, 81, 0.12);
     border-radius: 32px;

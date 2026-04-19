@@ -400,6 +400,7 @@
   .runtime-stage-shell {
     display: grid;
     gap: 16px;
+    min-height: 100%;
   }
 
   .runtime-retry-button {

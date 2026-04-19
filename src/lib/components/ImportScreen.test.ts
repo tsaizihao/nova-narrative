@@ -191,6 +191,11 @@ describe('ImportScreen', () => {
     await tick();
 
     const textarea = screen.getByRole('textbox', { name: '小说正文' }) as HTMLTextAreaElement;
+    const projectNameInput = screen.getByRole('textbox', { name: '项目名称' }) as HTMLInputElement;
+    expect(projectNameInput.style.boxSizing).toBe('border-box');
+    expect(projectNameInput.style.maxWidth).toBe('100%');
+    expect(textarea.style.boxSizing).toBe('border-box');
+    expect(textarea.style.maxWidth).toBe('100%');
     expect(textarea.style.height).toBe('420px');
     expect(getComputedStyle(textarea).overflowY).toBe('hidden');
 

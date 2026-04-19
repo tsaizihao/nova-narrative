@@ -350,14 +350,14 @@
   <div class="page-glow page-glow-right"></div>
 
   <div class="content-frame" data-phase={phase}>
-    {#if phase !== 'review'}
+    {#if phase === 'import' || phase === 'building'}
       <WorkspaceTopbar
-        eyebrow={phase === 'reader' ? 'reader' : '叙世者'}
-        title={phase === 'reader' ? '互动故事' : '小说改编工作台'}
+        eyebrow="叙世者"
+        title="小说改编工作台"
         metaLabel={project?.name ?? '单本项目制'}
         phase={stepperPhase}
         labels={phaseLabels}
-        showStepper={phase !== 'reader'}
+        showStepper={true}
       />
     {/if}
 
@@ -451,6 +451,7 @@
   .content-frame[data-phase='reader'],
   .content-frame[data-phase='ending'] {
     width: min(1360px, 100%);
+    min-height: calc(100vh - 56px);
   }
 
   .page-glow {
@@ -478,6 +479,11 @@
   @media (max-width: 900px) {
     .page-shell {
       padding: 18px;
+    }
+
+    .content-frame[data-phase='reader'],
+    .content-frame[data-phase='ending'] {
+      min-height: calc(100vh - 36px);
     }
   }
 </style>
