@@ -145,9 +145,11 @@ describe('ReaderDesktopShell', () => {
     const readerBody = document.querySelector('.reader-body');
     const dockShell = document.querySelector('.reader-dock-shell');
     expect(readerBody).toHaveAttribute('data-reader-region', 'story-scroll');
-    expect(dockShell).toHaveAttribute('data-layout', 'stacked-bottom');
+    expect(readerBody).toHaveAttribute('data-safe-area', 'bottom-dock');
+    expect(dockShell).toHaveAttribute('data-layout', 'fixed-bottom');
     expect(readerBody?.contains(document.querySelector('.reader-stage'))).toBe(true);
     expect(readerBody?.contains(dockShell as Node)).toBe(false);
+    expect(dockShell?.previousElementSibling).toBe(readerBody);
     expect(screen.getByRole('button', { name: '返回审阅台' })).toBeInTheDocument();
     const worldTrigger = screen.getByRole('button', { name: '世界设定' });
     expect(worldTrigger).toBeInTheDocument();
@@ -226,9 +228,11 @@ describe('ReaderMobileShell', () => {
     const readerBody = document.querySelector('.reader-body');
     const dockShell = document.querySelector('.reader-dock-shell');
     expect(readerBody).toHaveAttribute('data-reader-region', 'story-scroll');
-    expect(dockShell).toHaveAttribute('data-layout', 'stacked-bottom');
+    expect(readerBody).toHaveAttribute('data-safe-area', 'bottom-dock');
+    expect(dockShell).toHaveAttribute('data-layout', 'fixed-bottom');
     expect(readerBody?.contains(document.querySelector('.reader-stage'))).toBe(true);
     expect(readerBody?.contains(dockShell as Node)).toBe(false);
+    expect(dockShell?.previousElementSibling).toBe(readerBody);
 
     await fireEvent.click(screen.getByRole('button', { name: '状态与日志' }));
     const stateDialog = screen.getByRole('dialog', { name: '状态与日志' });

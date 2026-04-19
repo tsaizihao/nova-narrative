@@ -454,6 +454,10 @@
     min-height: calc(100vh - 56px);
   }
 
+  .content-frame[data-phase='reader'] {
+    height: calc(100vh - 56px);
+  }
+
   .page-glow {
     position: absolute;
     border-radius: 999px;
@@ -484,6 +488,10 @@
     .content-frame[data-phase='reader'],
     .content-frame[data-phase='ending'] {
       min-height: calc(100vh - 36px);
+    }
+
+    .content-frame[data-phase='reader'] {
+      height: calc(100vh - 36px);
     }
   }
 </style>

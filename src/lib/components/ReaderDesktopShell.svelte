@@ -89,11 +89,11 @@
     </div>
   </header>
 
-  <div class="reader-body" data-reader-region="story-scroll">
+  <div class="reader-body" data-reader-region="story-scroll" data-safe-area="bottom-dock">
     <ReaderStage blocks={history} {activity} />
   </div>
 
-  <div class="reader-dock-shell" data-layout="stacked-bottom">
+  <div class="reader-dock-shell" data-layout="fixed-bottom">
     <ReaderControlDock
       scene={snapshot.payload.scene}
       ruleFlags={snapshot.payload.session.rule_flags}
@@ -150,10 +150,14 @@
     --reader-accent-soft: rgba(31, 106, 87, 0.14);
     --reader-warm-accent: #9b6d39;
     --reader-danger: #b14d3b;
+    --reader-dock-clearance: clamp(232px, 30vh, 320px);
+    position: relative;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 12px;
-    min-height: calc(100vh - 56px);
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
   }
 
   .reader-head {
@@ -222,10 +226,14 @@
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
+    padding-bottom: var(--reader-dock-clearance);
+    scroll-padding-block-end: var(--reader-dock-clearance);
   }
 
   .reader-dock-shell {
-    position: relative;
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
     z-index: 10;
   }
 
@@ -236,9 +244,4 @@
     }
   }
 
-  @media (max-width: 900px) {
-    .reader-desktop {
-      min-height: calc(100vh - 36px);
-    }
-  }
 </style>

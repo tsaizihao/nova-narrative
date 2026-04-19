@@ -122,6 +122,7 @@
     display: grid;
     gap: 10px;
     width: 100%;
+    box-sizing: border-box;
     padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
     border: 1px solid rgba(121, 103, 81, 0.14);
     border-radius: 24px;
@@ -227,6 +228,7 @@
 
   .dock-input textarea {
     width: 100%;
+    box-sizing: border-box;
     min-height: 72px;
     max-height: 164px;
     resize: none;

@@ -477,7 +477,8 @@ describe('+page build flow', () => {
     expect(readerStage).toHaveAttribute('data-flow', 'longform');
     expect(document.querySelector('.workspace-topbar')).toBeNull();
     expect(document.querySelector('.reader-body')).toHaveAttribute('data-reader-region', 'story-scroll');
-    expect(document.querySelector('.reader-dock-shell')).toHaveAttribute('data-layout', 'stacked-bottom');
+    expect(document.querySelector('.reader-body')).toHaveAttribute('data-safe-area', 'bottom-dock');
+    expect(document.querySelector('.reader-dock-shell')).toHaveAttribute('data-layout', 'fixed-bottom');
     expect(screen.getByRole('button', { name: '自动播放' })).toBeInTheDocument();
     expect(mocks.runtimeBackend.startSession).toHaveBeenCalledWith('project-1');
     expect(mocks.runtimeBackend.getRuntimeSnapshot).toHaveBeenCalledWith('session-1');
