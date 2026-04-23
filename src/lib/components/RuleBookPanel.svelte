@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
-  import { ruleBadgeTone } from '$lib/rule-helpers';
+  import { ruleBadgeTone, rulePriorityLabel } from '$lib/rule-helpers';
   import type { RuleDefinition } from '$lib/types';
 
   export let rules: RuleDefinition[] = [];
@@ -47,12 +47,41 @@
             on:click={() => dispatch('select', rule.id)}
           >
             <strong>{rule.name}</strong>
-            <span class={`tone-${ruleBadgeTone(rule.priority)}`}>{rule.priority}</span>
+            <span class={`tone-${ruleBadgeTone(rule.priority)}`}>{rulePriorityLabel(rule.priority)}</span>
           </button>
         {/each}
       </div>
 
       <article class="editor">
+        <header class="document-head" data-testid="rule-document-head">
+          <div class="document-meta">
+            <span class="type-chip">规则</span>
+            <span class={`meta-chip tone-${ruleBadgeTone(draft.priority)}`}>
+              {rulePriorityLabel(draft.priority)}
+            </span>
+          </div>
+
+          <div class="document-title-row">
+            <div class="document-copy">
+              <h3>{draft.name || '未命名规则'}</h3>
+              <p class="document-note">
+                {draft.explanation || '补充规则说明，帮助审阅时快速判断意图。'}
+              </p>
+            </div>
+
+            <label class="state-toggle" data-testid="rule-enabled-row">
+              <span>状态</span>
+              <span class="toggle-copy">启用规则</span>
+              <input
+                aria-label="启用规则"
+                type="checkbox"
+                checked={draft.enabled}
+                on:change={(event) =>
+                  updateDraft({ enabled: (event.currentTarget as HTMLInputElement).checked })}
+              />
+            </label>
+          </div>
+        </header>
         <div class="row">
           <label>
             <span>名称</span>
@@ -72,10 +101,10 @@
                     .value as RuleDefinition['priority']
                 })}
             >
-              <option value="hard_constraint">hard_constraint</option>
-              <option value="soft_constraint">soft_constraint</option>
-              <option value="consequence">consequence</option>
-              <option value="narrative_gate">narrative_gate</option>
+              <option value="hard_constraint">{rulePriorityLabel('hard_constraint')}</option>
+              <option value="soft_constraint">{rulePriorityLabel('soft_constraint')}</option>
+              <option value="consequence">{rulePriorityLabel('consequence')}</option>
+              <option value="narrative_gate">{rulePriorityLabel('narrative_gate')}</option>
             </select>
           </label>
         </div>
@@ -88,16 +117,7 @@
               updateDraft({ explanation: (event.currentTarget as HTMLTextAreaElement).value })}
           ></textarea>
         </label>
-        <label class="toggle">
-          <span>启用</span>
-          <input
-            type="checkbox"
-            checked={draft.enabled}
-            on:change={(event) =>
-              updateDraft({ enabled: (event.currentTarget as HTMLInputElement).checked })}
-          />
-        </label>
-        <div class="meta">
+        <div class="meta-sheet">
           <p>
             条件：
             {draft.conditions
@@ -110,24 +130,26 @@
               '暂无效果'}
           </p>
         </div>
-        <p class="state">{dirty ? '有未保存更改' : '已与当前项目同步'}</p>
-        <div class="actions">
-          <button
-            type="button"
-            class="primary"
-            disabled={saveBusy}
-            on:click={() => dispatch('save')}
-          >
-            保存更改
-          </button>
-          <button
-            type="button"
-            class="ghost"
-            disabled={deleteBusy}
-            on:click={() => dispatch('remove')}
-          >
-            删除规则
-          </button>
+        <div class="editor-footer" data-testid="rule-editor-footer">
+          <p class="state">{dirty ? '有未保存更改' : '已与当前项目同步'}</p>
+          <div class="actions">
+            <button
+              type="button"
+              class="ghost"
+              disabled={deleteBusy}
+              on:click={() => dispatch('remove')}
+            >
+              删除规则
+            </button>
+            <button
+              type="button"
+              class="primary"
+              disabled={saveBusy}
+              on:click={() => dispatch('save')}
+            >
+              保存更改
+            </button>
+          </div>
         </div>
       </article>
     </div>
@@ -166,7 +188,7 @@
   .count,
   .empty,
   .state,
-  .meta p {
+  .meta-sheet p {
     margin: 0;
   }
 
@@ -183,8 +205,7 @@
   }
 
   .count,
-  .state,
-  .meta p {
+  .state {
     font-size: 0.8rem;
   }
 
@@ -196,6 +217,7 @@
     display: grid;
     grid-template-columns: minmax(210px, 0.4fr) minmax(0, 0.6fr);
     gap: 14px;
+    align-items: start;
   }
 
   .entity-list {
@@ -231,11 +253,72 @@
 
   .editor {
     display: grid;
+    gap: 24px;
+    align-content: start;
+    padding: 24px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(121, 103, 81, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .document-head {
+    display: grid;
     gap: 12px;
-    padding: 16px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(121, 103, 81, 0.12);
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(121, 103, 81, 0.14);
+  }
+
+  .document-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .type-chip,
+  .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(121, 103, 81, 0.08);
+    color: rgba(63, 47, 35, 0.72);
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+  }
+
+  .document-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .document-copy {
+    display: grid;
+    gap: 6px;
+  }
+
+  .document-note {
+    margin: 0;
+    color: rgba(63, 47, 35, 0.62);
+    font-size: 0.86rem;
+  }
+
+  .state-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    min-height: 38px;
+    padding: 0;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toggle-copy {
+    color: rgba(63, 47, 35, 0.76);
   }
 
   .row {
@@ -250,12 +333,18 @@
   }
 
   label span,
-  .meta p {
+  .meta-sheet p {
     color: rgba(63, 47, 35, 0.82);
+    font-size: 0.82rem;
   }
 
-  .toggle {
-    align-items: center;
+  .meta-sheet {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px dashed rgba(121, 103, 81, 0.24);
+    background: rgba(248, 243, 234, 0.62);
   }
 
   input,
@@ -275,10 +364,28 @@
     padding: 12px 14px;
   }
 
+  .state-toggle input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #1f6a57;
+  }
+
+  .editor-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 14px;
+    border-top: 1px solid rgba(121, 103, 81, 0.12);
+  }
+
   .actions {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .primary,
@@ -308,19 +415,23 @@
   }
 
   .tone-danger {
-    color: #b14d3b;
+    color: #8f3f30;
+    background: rgba(177, 77, 59, 0.12);
   }
 
   .tone-warning {
-    color: #a56a12;
+    color: #8b5a10;
+    background: rgba(165, 106, 18, 0.12);
   }
 
   .tone-accent {
     color: #1f6a57;
+    background: rgba(31, 106, 87, 0.14);
   }
 
   .tone-muted {
-    color: rgba(63, 47, 35, 0.58);
+    color: rgba(63, 47, 35, 0.68);
+    background: rgba(121, 103, 81, 0.1);
   }
 
   @media (max-width: 960px) {

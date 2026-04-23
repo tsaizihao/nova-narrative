@@ -264,6 +264,8 @@ describe('ReviewWorkspace', () => {
     });
 
     expect(screen.getByRole('heading', { name: '规则编辑' })).toBeInTheDocument();
+    expect(screen.getByText('1 个条目')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '规则' })).toBeInTheDocument();
     expect(screen.getByTestId('review-editor-column')).toBeInTheDocument();
     expect(screen.getByTestId('review-preview-rail')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存更改' })).toBeInTheDocument();

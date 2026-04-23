@@ -67,8 +67,11 @@
 <section class="workspace-shell">
   <div class="workspace-main" data-testid="review-editor-column">
     <div class="workspace-header">
-      <h3>{sectionTitle}</h3>
-      <span>{activeCount} 个条目</span>
+      <div class="header-copy">
+        <p class="section-eyebrow">review archive</p>
+        <h3>{sectionTitle}</h3>
+      </div>
+      <p class="section-count">{activeCount} 个条目</p>
     </div>
 
     <nav class="section-tabs" aria-label="审阅分类">
@@ -162,20 +165,20 @@
 
   .workspace-main {
     display: grid;
-    gap: 14px;
+    gap: 12px;
     align-content: start;
   }
 
   .workspace-header {
     display: flex;
     justify-content: space-between;
+    align-items: flex-end;
     gap: 12px;
-    align-items: baseline;
-    padding: 10px 24px 0;
+    padding: 6px 24px 0;
   }
 
   h3,
-  .workspace-header span,
+  .section-count,
   .workspace-error {
     margin: 0;
   }
@@ -186,9 +189,24 @@
     font-size: clamp(1.2rem, 2.1vw, 1.6rem);
   }
 
-  .workspace-header span {
+  .header-copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .section-eyebrow {
+    margin: 0;
+    color: rgba(63, 47, 35, 0.46);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.62rem;
+    line-height: 1;
+  }
+
+  .section-count {
     color: rgba(63, 47, 35, 0.62);
     font-size: 0.8rem;
+    padding-bottom: 4px;
   }
 
   .section-tabs {
@@ -199,11 +217,11 @@
   }
 
   .section-tabs button {
-    min-height: 42px;
-    padding: 0 16px;
+    min-height: 38px;
+    padding: 0 14px;
     border: 1px solid rgba(121, 103, 81, 0.14);
-    border-radius: 999px;
-    background: rgba(248, 243, 234, 0.74);
+    border-radius: 14px;
+    background: rgba(248, 243, 234, 0.58);
     color: #5f4f3e;
     font: inherit;
     cursor: pointer;
