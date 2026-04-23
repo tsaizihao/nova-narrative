@@ -28,6 +28,8 @@ export function loreSlotLabel(slot: WorldBookInsertionMode | string): string {
 export function loreSourceLabel(source: string): string {
   if (source === 'character_card') return '角色卡';
   if (source === 'extractor') return '导入提炼';
+  if (source === 'rule_sentence') return '规则语句';
+  if (source === 'rule_definition') return '规则定义';
   return source.replaceAll('_', ' ');
 }
 

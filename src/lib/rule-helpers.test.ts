@@ -31,6 +31,8 @@ describe('rule-helpers', () => {
   it('maps source and priority keys to readable archive labels', () => {
     expect(loreSourceLabel('character_card')).toBe('角色卡');
     expect(loreSourceLabel('extractor')).toBe('导入提炼');
+    expect(loreSourceLabel('rule_sentence')).toBe('规则语句');
+    expect(loreSourceLabel('rule_definition')).toBe('规则定义');
     expect(rulePriorityLabel('hard_constraint')).toBe('硬约束');
     expect(rulePriorityLabel('narrative_gate')).toBe('叙事门槛');
   });
