@@ -107,12 +107,21 @@ describe('review editor panels', () => {
 
     const documentHead = screen.getByTestId('rule-document-head');
     expect(within(documentHead).getByText('规则')).toBeInTheDocument();
-    expect(within(documentHead).getByText('硬约束')).toBeInTheDocument();
+    expect(within(documentHead).getByText('硬约束', { selector: 'span' })).toBeInTheDocument();
     expect(within(documentHead).getByRole('heading', { name: 'north-gate-midnight-forbidden' })).toBeInTheDocument();
 
     const enabledRow = screen.getByTestId('rule-enabled-row');
     expect(within(enabledRow).getByText('状态')).toBeInTheDocument();
     expect(within(enabledRow).getByLabelText('启用规则')).toBeChecked();
+
+    const nameField = screen.getByTestId('rule-name-field');
+    expect(within(nameField).getByText('名称')).toBeInTheDocument();
+    expect(within(nameField).getByDisplayValue('north-gate-midnight-forbidden')).toBeInTheDocument();
+    expect(within(nameField).queryByRole('combobox')).not.toBeInTheDocument();
+
+    const attributeRow = screen.getByTestId('rule-attribute-row');
+    expect(within(attributeRow).getByText('优先级')).toBeInTheDocument();
+    expect(within(attributeRow).getByRole('combobox')).toHaveDisplayValue('硬约束');
 
     const footer = screen.getByTestId('rule-editor-footer');
     const footerButtons = within(footer)

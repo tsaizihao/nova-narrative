@@ -81,33 +81,34 @@
               />
             </label>
           </div>
+
+          <div class="document-attributes" data-testid="rule-attribute-row">
+            <label class="attribute-field">
+              <span>优先级</span>
+              <select
+                value={draft.priority}
+                on:change={(event) =>
+                  updateDraft({
+                    priority: (event.currentTarget as HTMLSelectElement)
+                      .value as RuleDefinition['priority']
+                  })}
+              >
+                <option value="hard_constraint">{rulePriorityLabel('hard_constraint')}</option>
+                <option value="soft_constraint">{rulePriorityLabel('soft_constraint')}</option>
+                <option value="consequence">{rulePriorityLabel('consequence')}</option>
+                <option value="narrative_gate">{rulePriorityLabel('narrative_gate')}</option>
+              </select>
+            </label>
+          </div>
         </header>
-        <div class="row">
-          <label>
-            <span>名称</span>
-            <input
-              value={draft.name}
-              on:input={(event) =>
-                updateDraft({ name: (event.currentTarget as HTMLInputElement).value })}
-            />
-          </label>
-          <label>
-            <span>优先级</span>
-            <select
-              value={draft.priority}
-              on:change={(event) =>
-                updateDraft({
-                  priority: (event.currentTarget as HTMLSelectElement)
-                    .value as RuleDefinition['priority']
-                })}
-            >
-              <option value="hard_constraint">{rulePriorityLabel('hard_constraint')}</option>
-              <option value="soft_constraint">{rulePriorityLabel('soft_constraint')}</option>
-              <option value="consequence">{rulePriorityLabel('consequence')}</option>
-              <option value="narrative_gate">{rulePriorityLabel('narrative_gate')}</option>
-            </select>
-          </label>
-        </div>
+        <label class="primary-field" data-testid="rule-name-field">
+          <span>名称</span>
+          <input
+            value={draft.name}
+            on:input={(event) =>
+              updateDraft({ name: (event.currentTarget as HTMLInputElement).value })}
+          />
+        </label>
         <label>
           <span>说明</span>
           <textarea
@@ -291,7 +292,7 @@
   .document-title-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     flex-wrap: wrap;
   }
@@ -321,10 +322,19 @@
     color: rgba(63, 47, 35, 0.76);
   }
 
-  .row {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .document-attributes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: end;
+  }
+
+  .attribute-field {
+    inline-size: min(280px, 100%);
+  }
+
+  .primary-field input {
+    font-size: 1.02rem;
   }
 
   label {
@@ -435,8 +445,7 @@
   }
 
   @media (max-width: 960px) {
-    .workspace,
-    .row {
+    .workspace {
       grid-template-columns: 1fr;
     }
   }
