@@ -51,3 +51,6 @@ pnpm verify
 - 架构主入口：[docs/architecture-guide.md](docs/architecture-guide.md)
 - 实施路线主入口：[docs/implementation-roadmap-v1.md](docs/implementation-roadmap-v1.md)
 - 系统语义与术语参考：[docs/system-specification.md](docs/system-specification.md)
+- 全局视觉系统规范：[docs/superpowers/specs/2026-04-22-global-visual-system-design.md](docs/superpowers/specs/2026-04-22-global-visual-system-design.md)
+
+涉及 `UI / UX / 视觉 / 布局 / 组件样式` 的工作时，先阅读本页文档入口，再阅读全局视觉系统规范。

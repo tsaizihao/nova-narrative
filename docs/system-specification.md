@@ -1,6 +1,6 @@
 # 叙世者系统 Specification
 
-> 当前仓库的架构主入口已切换到 [docs/architecture-guide.md](./architecture-guide.md)，实施顺序主入口已切换到 [docs/implementation-roadmap-v1.md](./implementation-roadmap-v1.md)。
+> 当前仓库的架构主入口已切换到 [docs/architecture-guide.md](./architecture-guide.md)，实施顺序主入口已切换到 [docs/implementation-roadmap-v1.md](./implementation-roadmap-v1.md)，界面与视觉系统主入口已切换到 [docs/superpowers/specs/2026-04-22-global-visual-system-design.md](./superpowers/specs/2026-04-22-global-visual-system-design.md)。
 >
 > 本文档仍然是系统语义、术语和目标行为的重要参考，但不再单独承担“架构总蓝图 + 实施路线图”两种职责。当前仓库已经具备本地 `v1` 闭环基线，若与运行中代码冲突，请以代码行为为准。
 
@@ -13,6 +13,8 @@
 - 从原型走向目标系统还缺哪些关键能力
 
 本文档不是 README 的重复，也不是一次性的想法记录。它是仓库内最高层级的系统说明，覆盖产品目标、逻辑架构、核心模块、数据对象、命令接口、运行时状态机与术语。
+
+涉及 `UI / UX / 视觉 / 布局 / 组件样式` 的问题时，应与 `README.md` 中的文档入口一起阅读全局视觉系统规范，而不是仅凭本文档推导界面实现。
 
 使用约定如下：
 

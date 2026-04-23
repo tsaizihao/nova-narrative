@@ -11,7 +11,7 @@ Read this document first when the question is about:
 - what we borrow from `../aink`
 - what we intentionally do not borrow
 
-For product semantics and domain language, keep using [docs/system-specification.md](./system-specification.md). For execution order and milestones, use [docs/implementation-roadmap-v1.md](./implementation-roadmap-v1.md).
+For product semantics and domain language, keep using [docs/system-specification.md](./system-specification.md). For execution order and milestones, use [docs/implementation-roadmap-v1.md](./implementation-roadmap-v1.md). For UI, visual hierarchy, layout, and component styling decisions, use [docs/superpowers/specs/2026-04-22-global-visual-system-design.md](./superpowers/specs/2026-04-22-global-visual-system-design.md).
 
 ## Product Spine And v1 Scope
 

@@ -200,7 +200,7 @@ Dependencies:
 - phases 0-6 completed or consciously deferred
 
 Work:
-- align README, roadmap, architecture, and system spec
+- align README, roadmap, architecture, system spec, and the global visual-system spec
 - clean up compatibility layers that are no longer needed
 - standardize build/check/test commands
 - decide whether workspace migration is justified next
@@ -210,7 +210,7 @@ Done when:
 - new contributors can run, test, and extend the core loop confidently
 
 Implemented baseline:
-- `README.md`, architecture guide, roadmap, and system spec entry links are aligned
+- `README.md`, architecture guide, roadmap, system spec, and the global visual-system spec entry links are aligned
 - repo-level verification is standardized through `pnpm verify`
 - the current single-repo `v1` baseline is explicit, while workspace migration remains a later decision
 
