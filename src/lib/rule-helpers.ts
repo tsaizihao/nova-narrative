@@ -11,7 +11,8 @@ export function rulePriorityLabel(priority: RulePriority | string): string {
   if (priority === 'hard_constraint') return '硬约束';
   if (priority === 'soft_constraint') return '软约束';
   if (priority === 'consequence') return '结果推进';
-  return '叙事门槛';
+  if (priority === 'narrative_gate') return '叙事门槛';
+  return '未分类';
 }
 
 export function summarizePossibilityFlags(flags: string[]): string[] {

@@ -34,4 +34,9 @@ describe('rule-helpers', () => {
     expect(rulePriorityLabel('hard_constraint')).toBe('硬约束');
     expect(rulePriorityLabel('narrative_gate')).toBe('叙事门槛');
   });
+
+  it('uses explicit fallback paths for unknown source and priority labels', () => {
+    expect(loreSourceLabel('custom_archive_source')).toBe('custom archive source');
+    expect(rulePriorityLabel('unknown_priority')).toBe('未分类');
+  });
 });
