@@ -50,6 +50,16 @@
       </div>
 
       <article class="editor">
+        <header class="document-head" data-testid="character-document-head">
+          <div class="document-meta">
+            <span class="type-chip">角色卡</span>
+            <span class="meta-chip">{draft.role || '未设角色定位'}</span>
+          </div>
+          <h3>{draft.name || '未命名角色'}</h3>
+          <p class="document-note">
+            {draft.identity || '待补充身份'} · {draft.faction || '未设阵营'}
+          </p>
+        </header>
         <label>
           <span>姓名</span>
           <input
@@ -108,15 +118,17 @@
               })}
           ></textarea>
         </label>
-        <p class="state">{dirty ? '有未保存更改' : '已与当前项目同步'}</p>
-        <button
-          type="button"
-          class="primary"
-          disabled={saveBusy}
-          on:click={() => dispatch('save')}
-        >
-          保存更改
-        </button>
+        <div class="editor-footer" data-testid="character-editor-footer">
+          <p class="state">{dirty ? '有未保存更改' : '已与当前项目同步'}</p>
+          <button
+            type="button"
+            class="primary"
+            disabled={saveBusy}
+            on:click={() => dispatch('save')}
+          >
+            保存更改
+          </button>
+        </div>
       </article>
     </div>
   {:else}
@@ -182,6 +194,7 @@
     display: grid;
     grid-template-columns: minmax(210px, 0.4fr) minmax(0, 0.6fr);
     gap: 14px;
+    align-items: start;
   }
 
   .entity-list {
@@ -218,11 +231,45 @@
 
   .editor {
     display: grid;
-    gap: 12px;
-    padding: 16px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(121, 103, 81, 0.12);
+    gap: 24px;
+    align-content: start;
+    padding: 24px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(121, 103, 81, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .document-head {
+    display: grid;
+    gap: 10px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(121, 103, 81, 0.14);
+  }
+
+  .document-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .type-chip,
+  .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(121, 103, 81, 0.08);
+    color: rgba(63, 47, 35, 0.72);
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+  }
+
+  .document-note {
+    margin: 0;
+    color: rgba(63, 47, 35, 0.62);
+    font-size: 0.86rem;
   }
 
   .row {
@@ -256,8 +303,20 @@
     padding: 12px 14px;
   }
 
+  .editor-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 14px;
+    border-top: 1px solid rgba(121, 103, 81, 0.12);
+  }
+
   .primary {
     min-height: 44px;
+    min-width: 148px;
+    padding: 0 16px;
     border-radius: 999px;
     border: none;
     background: #1f6a57;
