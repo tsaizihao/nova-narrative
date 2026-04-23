@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   loreLifecycleTone,
+  loreSourceLabel,
   loreSlotLabel,
   ruleBadgeTone,
+  rulePriorityLabel,
   summarizePossibilityFlags
 } from '$lib/rule-helpers';
 
@@ -24,5 +26,12 @@ describe('rule-helpers', () => {
 
   it('keeps delayed lore visually distinct', () => {
     expect(loreLifecycleTone('delayed')).toBe('warning');
+  });
+
+  it('maps source and priority keys to readable archive labels', () => {
+    expect(loreSourceLabel('character_card')).toBe('角色卡');
+    expect(loreSourceLabel('extractor')).toBe('导入提炼');
+    expect(rulePriorityLabel('hard_constraint')).toBe('硬约束');
+    expect(rulePriorityLabel('narrative_gate')).toBe('叙事门槛');
   });
 });

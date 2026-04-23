@@ -7,6 +7,13 @@ export function ruleBadgeTone(priority: RulePriority | string): 'danger' | 'warn
   return 'muted';
 }
 
+export function rulePriorityLabel(priority: RulePriority | string): string {
+  if (priority === 'hard_constraint') return '硬约束';
+  if (priority === 'soft_constraint') return '软约束';
+  if (priority === 'consequence') return '结果推进';
+  return '叙事门槛';
+}
+
 export function summarizePossibilityFlags(flags: string[]): string[] {
   return flags.map((flag) => flag.replace('possibility.', ''));
 }
@@ -15,6 +22,12 @@ export function loreSlotLabel(slot: WorldBookInsertionMode | string): string {
   if (slot === 'scene_prelude') return '场景前奏';
   if (slot === 'rules_guard') return '规则守卫';
   return '阅读侧栏';
+}
+
+export function loreSourceLabel(source: string): string {
+  if (source === 'character_card') return '角色卡';
+  if (source === 'extractor') return '导入提炼';
+  return source.replaceAll('_', ' ');
 }
 
 export function loreLifecycleTone(
