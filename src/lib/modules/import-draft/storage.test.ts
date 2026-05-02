@@ -86,6 +86,23 @@ describe('import draft storage', () => {
     });
   });
 
+  it('falls back field-by-field when persisted JSON has invalid value types', () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        projectName: 42,
+        novelText: { x: 1 },
+        settingsPrompt: 'ok'
+      })
+    );
+
+    expect(loadImportDraft()).toEqual({
+      projectName: '',
+      novelText: '',
+      settingsPrompt: 'ok'
+    });
+  });
+
   it('returns an empty draft and no-ops when storage is unavailable', () => {
     Object.defineProperty(window, 'localStorage', {
       configurable: true,

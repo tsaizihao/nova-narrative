@@ -27,6 +27,8 @@ function getStorage(): Storage | null {
 }
 
 export function loadImportDraft(): ImportDraftSnapshot {
+  if (!canUseStorage()) return { ...EMPTY_DRAFT };
+
   const storage = getStorage();
   if (!storage) return { ...EMPTY_DRAFT };
 
@@ -42,8 +44,8 @@ export function loadImportDraft(): ImportDraftSnapshot {
   try {
     const parsed = JSON.parse(raw) as Partial<ImportDraftSnapshot>;
     return {
-      projectName: parsed.projectName ?? '',
-      novelText: parsed.novelText ?? '',
+      projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
+      novelText: typeof parsed.novelText === 'string' ? parsed.novelText : '',
       settingsPrompt: typeof parsed.settingsPrompt === 'string' ? parsed.settingsPrompt : null
     };
   } catch {
@@ -52,6 +54,8 @@ export function loadImportDraft(): ImportDraftSnapshot {
 }
 
 export function saveImportDraft(snapshot: ImportDraftSnapshot) {
+  if (!canUseStorage()) return;
+
   const storage = getStorage();
   if (!storage) return;
 
@@ -63,6 +67,8 @@ export function saveImportDraft(snapshot: ImportDraftSnapshot) {
 }
 
 export function clearImportDraft() {
+  if (!canUseStorage()) return;
+
   const storage = getStorage();
   if (!storage) return;
 
