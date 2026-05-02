@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
   import { normalizeCommandError } from '$lib/backend/commandClient';
@@ -7,22 +8,31 @@
   import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
   import RuntimeStageShell from '$lib/components/RuntimeStageShell.svelte';
   import WorkspaceTopbar from '$lib/components/WorkspaceTopbar.svelte';
+  import {
+    clearImportDraft,
+    loadImportDraft,
+    saveImportDraft
+  } from '$lib/modules/import-draft/storage';
   import * as projectBackend from '$lib/modules/projects/backend';
   import { toSavedProjectCardEntry, type SavedProjectCardEntry } from '$lib/modules/projects/library';
   import * as runtimeBackend from '$lib/modules/runtime/backend';
   import * as settingsBackend from '$lib/modules/settings/backend';
+  import {
+    clearWorkspaceContext,
+    loadWorkspaceContext,
+    saveWorkspaceContext,
+    type WorkspacePhase
+  } from '$lib/modules/workspace-context/storage';
   import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
   import type {
-    AiProviderKind,
     AppAiSettingsSnapshot,
     BuildStatus,
     NovelProject,
-    SaveAiSettingsInput,
     SessionStatus,
   } from '$lib/types';
 
-  type Phase = 'import' | 'building' | 'review' | 'reader';
+  type Phase = WorkspacePhase;
   type StepperPhase = Phase;
 
   let phase: Phase = 'import';
@@ -42,7 +52,7 @@
   let resumableSessionStatus: SessionStatus | null = null;
   let error = '';
   let busy = false;
-  let settingsBusy = false;
+  let settingsPrompt = '';
   let aiSettings: AppAiSettingsSnapshot = {
     selected_provider: 'heuristic',
     openai_compatible: {
@@ -56,19 +66,7 @@
       has_api_key: false
     }
   };
-  let aiDraft: SaveAiSettingsInput = {
-    selected_provider: 'heuristic',
-    openai_compatible: {
-      base_url: '',
-      model: '',
-      api_key: ''
-    },
-    openrouter: {
-      base_url: 'https://openrouter.ai/api/v1',
-      model: '',
-      api_key: ''
-    }
-  };
+  let aiSettingsLoadPromise: Promise<void> | null = null;
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
 
@@ -104,25 +102,97 @@
     resumableSessionStatus = session ? normalizeSessionStatus(session.status) : null;
   }
 
-  function syncAiDraft(snapshot: AppAiSettingsSnapshot) {
-    aiDraft = {
-      selected_provider: snapshot.selected_provider,
-      openai_compatible: {
-        base_url: snapshot.openai_compatible.base_url,
-        model: snapshot.openai_compatible.model,
-        api_key: ''
-      },
-      openrouter: {
-        base_url: snapshot.openrouter.base_url || 'https://openrouter.ai/api/v1',
-        model: snapshot.openrouter.model,
-        api_key: ''
-      }
-    };
+  function activeProviderSnapshot(snapshot: AppAiSettingsSnapshot) {
+    return snapshot.selected_provider === 'openrouter'
+      ? snapshot.openrouter
+      : snapshot.openai_compatible;
+  }
+
+  function selectedProviderIsReady(snapshot: AppAiSettingsSnapshot) {
+    if (snapshot.selected_provider === 'heuristic') return true;
+
+    const provider = activeProviderSnapshot(snapshot);
+    return (
+      provider.base_url.trim().length > 0 &&
+      provider.model.trim().length > 0 &&
+      provider.has_api_key
+    );
+  }
+
+  function persistImportDraft() {
+    saveImportDraft({
+      projectName,
+      novelText,
+      settingsPrompt: settingsPrompt || null
+    });
+  }
+
+  function saveCurrentWorkspaceContext(currentPhase: WorkspacePhase) {
+    saveWorkspaceContext({
+      phase: currentPhase,
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? projectName,
+      sessionId: activeSessionId
+    });
+  }
+
+  async function navigateToSettings(currentPhase: WorkspacePhase) {
+    persistImportDraft();
+    saveCurrentWorkspaceContext(currentPhase);
+    await goto('/settings');
+  }
+
+  async function restoreWorkspaceContext() {
+    const savedDraft = loadImportDraft();
+    projectName = savedDraft.projectName;
+    novelText = savedDraft.novelText;
+    settingsPrompt = savedDraft.settingsPrompt ?? '';
+
+    const context = loadWorkspaceContext();
+    if (!context) return;
+
+    if (context.phase === 'import' || !context.projectId) {
+      clearWorkspaceContext();
+      return;
+    }
+
+    const restoredProject = await projectBackend.getProject(context.projectId);
+    project = restoredProject;
+    projectName = restoredProject.name;
+    buildStatus = restoredProject.build_status;
+    activeSessionId = null;
+
+    if (context.phase === 'reader' && context.sessionId) {
+      syncProjectSessionState({
+        session_id: context.sessionId,
+        status: 'active'
+      });
+      activeSessionId = context.sessionId;
+      phase = 'reader';
+      clearWorkspaceContext();
+      return;
+    }
+
+    if (context.phase === 'review') {
+      syncProjectSessionState(await runtimeBackend.findProjectSession(restoredProject.id).catch(() => null));
+      phase = 'review';
+      clearWorkspaceContext();
+      return;
+    }
+
+    if (restoredProject.build_status.stage === 'ready') {
+      syncProjectSessionState(await runtimeBackend.findProjectSession(restoredProject.id).catch(() => null));
+      phase = 'review';
+    } else {
+      syncProjectSessionState(null);
+      phase = 'building';
+    }
+
+    clearWorkspaceContext();
   }
 
   async function loadAiSettings() {
     aiSettings = await settingsBackend.getAiSettings();
-    syncAiDraft(aiSettings);
   }
 
   async function loadResumableProjects() {
@@ -130,77 +200,27 @@
     resumableProjects = entries.map((entry) => toSavedProjectCardEntry(entry));
   }
 
-  function updateAiProvider(provider: AiProviderKind) {
-    aiDraft = {
-      ...aiDraft,
-      selected_provider: provider,
-      openrouter: {
-        ...aiDraft.openrouter,
-        base_url: aiDraft.openrouter.base_url || 'https://openrouter.ai/api/v1'
-      }
-    };
-  }
-
-  function updateActiveAiField(field: 'base_url' | 'model' | 'api_key', value: string) {
-    if (aiDraft.selected_provider === 'openrouter') {
-      aiDraft = {
-        ...aiDraft,
-        openrouter: {
-          ...aiDraft.openrouter,
-          [field]: value
-        }
-      };
-      return;
-    }
-
-    aiDraft = {
-      ...aiDraft,
-      openai_compatible: {
-        ...aiDraft.openai_compatible,
-        [field]: value
-      }
-    };
-  }
-
-  async function persistAiSettings() {
-    settingsBusy = true;
-    error = '';
-
-    try {
-      aiSettings = await settingsBackend.saveAiSettings(aiDraft);
-      syncAiDraft(aiSettings);
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : '保存 AI 接口设置失败';
-    } finally {
-      settingsBusy = false;
-    }
-  }
-
-  async function clearProviderApiKey(provider: AiProviderKind) {
-    if (provider === 'heuristic') return;
-
-    settingsBusy = true;
-    error = '';
-
-    try {
-      aiSettings = await settingsBackend.clearProviderApiKey(provider);
-      syncAiDraft(aiSettings);
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : '清除 API key 失败';
-    } finally {
-      settingsBusy = false;
-    }
-  }
-
   async function initializeStory() {
     if (!projectName.trim() || !novelText.trim()) return;
 
+    if (aiSettingsLoadPromise) {
+      await aiSettingsLoadPromise;
+    }
+
+    if (!selectedProviderIsReady(aiSettings)) {
+      settingsPrompt = '当前模型尚未完成配置，请先补全 AI 设置。';
+      await navigateToSettings('import');
+      return;
+    }
+
     const reusableProject = findReusableProject(projectName, novelText);
     if (reusableProject) {
+      clearWorkspaceContext();
       await openExistingProject(reusableProject.project.id);
       return;
     }
 
+    clearWorkspaceContext();
     busy = true;
     error = '';
     activeSessionId = null;
@@ -209,6 +229,7 @@
 
     try {
       project = await projectBackend.createProject(projectName.trim());
+      clearImportDraft();
       importedProject = await projectBackend.importNovelText(project.id, novelText.trim());
       project = importedProject;
 
@@ -355,11 +376,19 @@
       readerLayoutMode = resolveReaderLayoutMode(window.innerWidth);
     };
 
-    void loadAiSettings().catch((caught) => {
-      error = caught instanceof Error ? caught.message : '加载 AI 设置失败';
-    });
+    aiSettingsLoadPromise = loadAiSettings()
+      .catch((caught) => {
+        error = caught instanceof Error ? caught.message : '加载 AI 设置失败';
+      })
+      .finally(() => {
+        aiSettingsLoadPromise = null;
+      });
+
     void loadResumableProjects().catch((caught) => {
       error = caught instanceof Error ? caught.message : '加载已有项目失败';
+    });
+    void restoreWorkspaceContext().catch((caught) => {
+      error = caught instanceof Error ? caught.message : '恢复工作区失败';
     });
     updateReaderLayout();
     window.addEventListener('resize', updateReaderLayout);
@@ -385,6 +414,9 @@
         phase={stepperPhase}
         labels={phaseLabels}
         showStepper={true}
+        showSettingsAction={true}
+        settingsActive={false}
+        on:openSettings={() => navigateToSettings(phase)}
       />
     {/if}
 
@@ -396,8 +428,7 @@
         {error}
         {resumableProjects}
         {aiSettings}
-        {aiDraft}
-        {settingsBusy}
+        {settingsPrompt}
         on:submit={initializeStory}
         on:sample={fillSample}
         on:fileLoaded={() => {
@@ -408,12 +439,7 @@
         }}
         on:updateProjectName={(event) => (projectName = event.detail)}
         on:updateNovelText={(event) => (novelText = event.detail)}
-        on:updateAiProvider={(event) => updateAiProvider(event.detail)}
-        on:updateAiBaseUrl={(event) => updateActiveAiField('base_url', event.detail)}
-        on:updateAiModel={(event) => updateActiveAiField('model', event.detail)}
-        on:updateAiApiKey={(event) => updateActiveAiField('api_key', event.detail)}
-        on:saveAiSettings={persistAiSettings}
-        on:clearProviderApiKey={(event) => clearProviderApiKey(event.detail)}
+        on:openSettings={() => navigateToSettings('import')}
         on:openProject={(event) => openExistingProject(event.detail)}
       />
     {:else if phase === 'building'}
