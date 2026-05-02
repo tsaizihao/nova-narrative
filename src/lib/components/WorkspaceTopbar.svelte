@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import PhaseStepper from './PhaseStepper.svelte';
 
   type Phase = 'import' | 'building' | 'review' | 'reader';
@@ -9,9 +10,15 @@
   export let phase: Phase = 'import';
   export let labels: string[] = [];
   export let showStepper = true;
+  export let showSettingsAction = false;
+  export let settingsActive = false;
+
+  const dispatch = createEventDispatcher<{
+    openSettings: void;
+  }>();
 </script>
 
-<header class="workspace-topbar" data-reader={showStepper ? 'false' : 'true'}>
+<header class="workspace-topbar" data-reader={!showStepper && !showSettingsAction ? 'true' : 'false'}>
   <div class="brand-copy">
     <p>{eyebrow}</p>
     <strong>{title}</strong>
@@ -22,9 +29,23 @@
       <span>{metaLabel}</span>
     {/if}
 
-    {#if showStepper}
-      <PhaseStepper {phase} {labels} />
-    {/if}
+    <div class="meta-actions">
+      {#if showStepper}
+        <PhaseStepper {phase} {labels} />
+      {/if}
+
+      {#if showSettingsAction}
+        <button
+          type="button"
+          class="settings-action"
+          class:active={settingsActive}
+          aria-pressed={settingsActive}
+          on:click={() => dispatch('openSettings')}
+        >
+          设置
+        </button>
+      {/if}
+    </div>
   </div>
 </header>
 
@@ -69,9 +90,56 @@
     gap: 10px;
   }
 
+  .meta-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
   .workspace-meta span {
     color: rgba(63, 47, 35, 0.64);
     font-size: 0.9rem;
+  }
+
+  .settings-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 0 16px;
+    border: 1px solid rgba(31, 106, 87, 0.16);
+    border-radius: 999px;
+    background: rgba(255, 253, 252, 0.92);
+    color: rgba(63, 47, 35, 0.82);
+    font: inherit;
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      border-color 160ms ease,
+      background-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .settings-action:hover {
+    border-color: rgba(31, 106, 87, 0.28);
+    background: rgba(247, 242, 234, 0.96);
+  }
+
+  .settings-action:focus-visible {
+    outline: none;
+    border-color: #1f6a57;
+    box-shadow: 0 0 0 3px rgba(31, 106, 87, 0.14);
+  }
+
+  .settings-action.active,
+  .settings-action[aria-pressed='true'] {
+    border-color: rgba(31, 106, 87, 0.42);
+    background: rgba(228, 240, 236, 0.96);
+    color: #1f6a57;
   }
 
   .workspace-topbar[data-reader='true'] .workspace-meta {
@@ -96,6 +164,10 @@
 
     .workspace-meta {
       justify-items: start;
+    }
+
+    .meta-actions {
+      justify-content: flex-start;
     }
   }
 </style>
