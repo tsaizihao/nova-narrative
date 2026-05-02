@@ -13,6 +13,8 @@ pub fn compile_story_package(project: &NovelProject, story_bible: StoryBible) ->
             title: "序章".into(),
             content: project.raw_text.clone(),
             excerpt: project.raw_text.chars().take(96).collect(),
+            source_unit_kind: crate::models::SourceUnitKind::Chapter,
+            chapter_number: Some(1),
         }]
     } else {
         project.chapters.clone()

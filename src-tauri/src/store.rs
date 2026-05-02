@@ -15,7 +15,7 @@ use crate::{
         AiSettingsRepository, DiagnosticsLevel, DiagnosticsRepository, PersistedAiSettings,
         ProjectRepository, RuntimeDataPaths, SessionRepository, StorageManifestRepository,
     },
-    importer::{sanitize_text, split_novel_into_chapters},
+    importer::{build_import_diagnostics, sanitize_text, split_novel_into_chapters},
     models::{
         AiProviderKind, AppAiSettingsSnapshot, BuildStage, BuildStatus, CharacterCard, NovelProject,
         ProjectedOutcomePreview, ProjectedSceneChoicePreview, ReviewPreviewContext,
@@ -253,6 +253,7 @@ impl ProjectStore {
 
         project.raw_text = sanitized;
         project.chapters = split_novel_into_chapters(&project.raw_text);
+        project.import_diagnostics = Some(build_import_diagnostics(&project.raw_text, &project.chapters));
         clear_build_derived_state(project);
         project.build_status = build_status(BuildStage::Imported, "Novel imported", 20, None);
 
@@ -1562,6 +1563,58 @@ mod tests {
     }
 
     #[test]
+    fn water_margin_excerpt_import_and_build_preserves_source_units() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let runtime_dir = dir.path().to_path_buf();
+        let mut store = ProjectStore::new(runtime_dir.clone()).expect("store");
+
+        let project = store.create_project("水浒传片段").expect("project");
+        let imported = store
+            .import_novel_text(
+                &project.id,
+                include_str!("../../docs/fixtures/water-margin-regression-excerpt.txt"),
+            )
+            .expect("import");
+
+        assert_eq!(imported.build_status.stage, BuildStage::Imported);
+        assert_eq!(imported.chapters.len(), 3);
+        assert_eq!(imported.chapters[0].source_unit_kind, crate::models::SourceUnitKind::Preface);
+        assert_eq!(imported.chapters[1].chapter_number, Some(1));
+        assert_eq!(imported.chapters[2].chapter_number, Some(2));
+        let diagnostics = imported
+            .import_diagnostics
+            .as_ref()
+            .expect("import diagnostics");
+        assert_eq!(diagnostics.source_unit_count, 3);
+        assert_eq!(diagnostics.unassigned_line_count, 0);
+        assert_eq!(diagnostics.missing_glyph_count, 0);
+        assert!(diagnostics.char_count >= 6_000);
+        assert!(diagnostics.char_count <= 8_000);
+
+        store.build_story_package(&project.id).expect("build");
+
+        let reloaded_store = ProjectStore::reload(runtime_dir).expect("reload");
+        let project = reloaded_store.get_project(&project.id).expect("project");
+        let kernel = project.adaptation_kernel.as_ref().expect("project kernel");
+        assert_eq!(kernel.source_novel.chapter_count, 3);
+        assert_eq!(kernel.source_novel.chapters[0].source_unit_kind, crate::models::SourceUnitKind::Preface);
+        assert_eq!(kernel.source_novel.chapters[0].chapter_number, None);
+        assert_eq!(kernel.source_novel.chapters[1].chapter_number, Some(1));
+        assert_eq!(kernel.source_novel.chapters[2].chapter_number, Some(2));
+
+        let package = reloaded_store.load_story_package(&project.id).expect("package");
+        assert!(package.scenes.values().any(|scene| scene.title.contains("楔子")));
+        assert!(package
+            .adaptation_kernel
+            .as_ref()
+            .expect("package kernel")
+            .source_novel
+            .chapters
+            .iter()
+            .any(|chapter| chapter.source_unit_kind == crate::models::SourceUnitKind::Preface));
+    }
+
+    #[test]
     fn reimport_clears_adaptation_kernel_with_other_build_artifacts() {
         let dir = tempfile::tempdir().expect("temp dir");
         let runtime_dir = dir.path().to_path_buf();
@@ -2049,6 +2102,7 @@ mod tests {
             rules: Vec::new(),
             review_preview_context: None,
             adaptation_kernel: None,
+            import_diagnostics: None,
         };
 
         let snapshot = story_bible_snapshot(&project);

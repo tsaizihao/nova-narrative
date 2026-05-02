@@ -39,12 +39,30 @@ export interface ChapterChunk {
   title: string;
   content: string;
   excerpt: string;
+  source_unit_kind?: SourceUnitKind;
+  chapter_number?: number | null;
+}
+
+export type SourceUnitKind = 'preface' | 'chapter' | 'scene';
+
+export interface ImportDiagnostics {
+  byte_count: number;
+  char_count: number;
+  line_count: number;
+  non_empty_line_count: number;
+  source_unit_count: number;
+  unassigned_line_count: number;
+  missing_glyph_count: number;
+  max_line_char_count: number;
+  normalized_crlf: boolean;
 }
 
 export interface SourceChapterSnapshot {
   chapter_id: string;
   title: string;
   excerpt: string;
+  source_unit_kind?: SourceUnitKind;
+  chapter_number?: number | null;
 }
 
 export interface SourceNovelSnapshot {
@@ -452,6 +470,7 @@ export interface NovelProject {
   worldbook_entries: WorldBookEntry[];
   rules: RuleDefinition[];
   review_preview_context?: ReviewPreviewContext | null;
+  import_diagnostics?: ImportDiagnostics | null;
 }
 
 export type SavedProjectActivityKind = 'project' | 'session' | 'ending';

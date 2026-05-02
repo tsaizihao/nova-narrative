@@ -121,6 +121,28 @@ impl Default for SaveAiSettingsInput {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceUnitKind {
+    Preface,
+    #[default]
+    Chapter,
+    Scene,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ImportDiagnostics {
+    pub byte_count: usize,
+    pub char_count: usize,
+    pub line_count: usize,
+    pub non_empty_line_count: usize,
+    pub source_unit_count: usize,
+    pub unassigned_line_count: usize,
+    pub missing_glyph_count: usize,
+    pub max_line_char_count: usize,
+    pub normalized_crlf: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChapterChunk {
     pub id: String,
@@ -128,6 +150,10 @@ pub struct ChapterChunk {
     pub title: String,
     pub content: String,
     pub excerpt: String,
+    #[serde(default)]
+    pub source_unit_kind: SourceUnitKind,
+    #[serde(default)]
+    pub chapter_number: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -135,6 +161,10 @@ pub struct SourceChapterSnapshot {
     pub chapter_id: String,
     pub title: String,
     pub excerpt: String,
+    #[serde(default)]
+    pub source_unit_kind: SourceUnitKind,
+    #[serde(default)]
+    pub chapter_number: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -195,6 +225,8 @@ pub struct NovelProject {
     pub review_preview_context: Option<ReviewPreviewContext>,
     #[serde(default)]
     pub adaptation_kernel: Option<AdaptationKernelSnapshot>,
+    #[serde(default)]
+    pub import_diagnostics: Option<ImportDiagnostics>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

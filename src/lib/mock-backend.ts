@@ -114,6 +114,21 @@ function splitChapterLines(text: string) {
     .filter(Boolean);
 }
 
+function buildImportDiagnostics(content: string, chapters: NovelProject['chapters']) {
+  const lines = content.split('\n');
+  return {
+    byte_count: new TextEncoder().encode(content).length,
+    char_count: Array.from(content).length,
+    line_count: content ? lines.length : 0,
+    non_empty_line_count: lines.filter((line) => line.trim()).length,
+    source_unit_count: chapters.length,
+    unassigned_line_count: 0,
+    missing_glyph_count: Array.from(content.matchAll(/□/g)).length,
+    max_line_char_count: lines.reduce((max, line) => Math.max(max, Array.from(line).length), 0),
+    normalized_crlf: false
+  };
+}
+
 function clearProjectBuildOutputs(project: NovelProject): NovelProject {
   return {
     ...project,
@@ -504,7 +519,9 @@ function buildAdaptationKernel(
       chapters: project.chapters.map((chapter) => ({
         chapter_id: chapter.id,
         title: chapter.title,
-        excerpt: chapter.excerpt
+        excerpt: chapter.excerpt,
+        source_unit_kind: chapter.source_unit_kind ?? 'chapter',
+        chapter_number: chapter.chapter_number
       }))
     },
     canon_characters: storyBible.characters.map((character) => ({
@@ -1212,7 +1229,15 @@ export const mockBackend = {
     const chapters = lines
       .map((line, index) =>
         line.startsWith('第')
-          ? { id: `chapter-${index}`, order: index + 1, title: line, content: '', excerpt: '' }
+          ? ({
+              id: `chapter-${index}`,
+              order: index + 1,
+              title: line,
+              content: '',
+              excerpt: '',
+              source_unit_kind: 'chapter',
+              chapter_number: index + 1
+            } satisfies NovelProject['chapters'][number])
           : line
       )
       .reduce<Array<NovelProject['chapters'][number]>>((accumulator, item) => {
@@ -1233,6 +1258,7 @@ export const mockBackend = {
       ...clearProjectBuildOutputs(project),
       raw_text: sanitized,
       chapters,
+      import_diagnostics: buildImportDiagnostics(sanitized, chapters),
       build_status: {
         stage: 'imported',
         message: 'Novel imported',

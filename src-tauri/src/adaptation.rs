@@ -14,6 +14,8 @@ pub fn build_adaptation_kernel(
             chapter_id: chapter.id.clone(),
             title: chapter.title.clone(),
             excerpt: chapter.excerpt.clone(),
+            source_unit_kind: chapter.source_unit_kind.clone(),
+            chapter_number: chapter.chapter_number,
         })
         .collect();
 
@@ -77,7 +79,7 @@ mod tests {
     use super::build_adaptation_kernel;
     use crate::models::{
         BuildStage, BuildStatus, ChapterChunk, CharacterCard, CoreConflict, NovelProject,
-        RelationshipEdge, StoryBible, TimelineEntry, WorldRule,
+        RelationshipEdge, SourceUnitKind, StoryBible, TimelineEntry, WorldRule,
     };
     use std::collections::BTreeMap;
 
@@ -92,6 +94,8 @@ mod tests {
                 title: "第1章 雨夜来客".into(),
                 content: "沈砚站在北门前。".into(),
                 excerpt: "沈砚站在北门前。".into(),
+                source_unit_kind: SourceUnitKind::Chapter,
+                chapter_number: Some(1),
             }],
             build_status: BuildStatus {
                 stage: BuildStage::Imported,
@@ -119,6 +123,7 @@ mod tests {
             rules: Vec::new(),
             review_preview_context: None,
             adaptation_kernel: None,
+            import_diagnostics: None,
         }
     }
 
