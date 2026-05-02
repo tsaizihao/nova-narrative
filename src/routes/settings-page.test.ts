@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
     goto: vi.fn()
   },
   panelControl: {
-    forceClearEmitter: false
+    forceEventEmitter: false
   }
 }));
 
@@ -38,9 +38,17 @@ vi.mock('$lib/components/AiSettingsPanel.svelte', async () => {
 
   return {
     default: function MockableAiSettingsPanel($$anchor: Node, $$props: Record<string, unknown>) {
-      if (!mocks.panelControl.forceClearEmitter) {
+      if (!mocks.panelControl.forceEventEmitter) {
         return actual.default($$anchor, $$props);
       }
+
+      const saveButton = document.createElement('button');
+      saveButton.type = 'button';
+      saveButton.textContent = '强制保存';
+      saveButton.addEventListener('click', () => {
+        const eventHandler = ($$props.$$events as { saveAiSettings?: () => void })?.saveAiSettings;
+        eventHandler?.();
+      });
 
       const clearButton = document.createElement('button');
       clearButton.type = 'button';
@@ -61,6 +69,7 @@ vi.mock('$lib/components/AiSettingsPanel.svelte', async () => {
       queueMicrotask(syncError);
       setTimeout(syncError, 0);
 
+      $$anchor.before(saveButton);
       $$anchor.before(clearButton);
       $$anchor.before(errorText);
     }
@@ -72,7 +81,7 @@ import SettingsPage from './settings/+page.svelte';
 describe('/settings route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.panelControl.forceClearEmitter = false;
+    mocks.panelControl.forceEventEmitter = false;
 
     mocks.settingsBackend.getAiSettings.mockResolvedValue(snapshot);
     mocks.settingsBackend.saveAiSettings.mockResolvedValue(snapshot);
@@ -164,16 +173,18 @@ describe('/settings route', () => {
     expect(mocks.settingsBackend.clearProviderApiKey).not.toHaveBeenCalled();
   });
 
-  it('does not clear provider keys when a panel clear event fires after initial load failure', async () => {
+  it('does not write settings when panel save and clear events fire after initial load failure', async () => {
     mocks.settingsBackend.getAiSettings.mockRejectedValueOnce(new Error('加载 AI 设置失败'));
-    mocks.panelControl.forceClearEmitter = true;
+    mocks.panelControl.forceEventEmitter = true;
 
     render(SettingsPage);
 
     expect(await screen.findByText('加载 AI 设置失败')).toBeInTheDocument();
 
+    await fireEvent.click(screen.getByRole('button', { name: '强制保存' }));
     await fireEvent.click(screen.getByRole('button', { name: '强制清除' }));
 
+    expect(mocks.settingsBackend.saveAiSettings).not.toHaveBeenCalled();
     expect(mocks.settingsBackend.clearProviderApiKey).not.toHaveBeenCalled();
   });
 });
