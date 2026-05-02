@@ -59,6 +59,10 @@ describe('/settings route', () => {
 
     await screen.findByText('已保存 API key');
 
+    await fireEvent.input(screen.getByLabelText('模型'), {
+      target: { value: 'anthropic/claude-sonnet-4' }
+    });
+
     await fireEvent.click(screen.getByRole('button', { name: '保存接口设置' }));
 
     await waitFor(() => {
@@ -71,11 +75,21 @@ describe('/settings route', () => {
         },
         openrouter: {
           base_url: 'https://openrouter.ai/api/v1',
-          model: 'openai/gpt-4o-mini',
+          model: 'anthropic/claude-sonnet-4',
           api_key: ''
         }
       });
     });
+  });
+
+  it('clears the saved API key for the selected provider', async () => {
+    render(SettingsPage);
+
+    await screen.findByText('已保存 API key');
+
+    await fireEvent.click(screen.getByRole('button', { name: '清除已存密钥' }));
+
+    expect(mocks.settingsBackend.clearProviderApiKey).toHaveBeenCalledWith('openrouter');
   });
 
   it('returns to the workspace when the back action is clicked', async () => {
@@ -86,5 +100,16 @@ describe('/settings route', () => {
     await fireEvent.click(screen.getByRole('button', { name: '返回当前工作' }));
 
     expect(mocks.navigation.goto).toHaveBeenCalledWith('/');
+  });
+
+  it('keeps settings actions disabled after an initial load failure', async () => {
+    mocks.settingsBackend.getAiSettings.mockRejectedValueOnce(new Error('加载 AI 设置失败'));
+
+    render(SettingsPage);
+
+    expect(await screen.findByText('加载 AI 设置失败')).toBeInTheDocument();
+
+    expect(screen.getByLabelText('接口类型')).toBeDisabled();
+    expect(screen.getByRole('button', { name: '保存接口设置' })).toBeDisabled();
   });
 });

@@ -9,6 +9,7 @@
 
   let error = '';
   let busy = false;
+  let hasLoaded = false;
   let aiSettings: AppAiSettingsSnapshot = {
     selected_provider: 'heuristic',
     openai_compatible: {
@@ -91,12 +92,18 @@
     try {
       aiSettings = await settingsBackend.getAiSettings();
       syncAiDraft(aiSettings);
+      hasLoaded = true;
+    } catch (caught) {
+      hasLoaded = false;
+      throw caught;
     } finally {
       busy = false;
     }
   }
 
   async function persistAiSettings() {
+    if (!hasLoaded) return;
+
     busy = true;
     error = '';
 
@@ -111,7 +118,7 @@
   }
 
   async function clearProviderApiKey(provider: AiProviderKind) {
-    if (provider === 'heuristic') return;
+    if (!hasLoaded || provider === 'heuristic') return;
 
     busy = true;
     error = '';
@@ -167,7 +174,7 @@
     <AiSettingsPanel
       {aiSettings}
       {aiDraft}
-      {busy}
+      busy={busy || !hasLoaded}
       {error}
       on:updateAiProvider={(event) => updateAiProvider(event.detail)}
       on:updateAiBaseUrl={(event) => updateActiveAiField('base_url', event.detail)}
