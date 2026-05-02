@@ -34,6 +34,11 @@
 
   const MIN_TEXTAREA_HEIGHT = 320;
   const fieldBoxStyle = 'box-sizing: border-box; max-width: 100%;';
+  const heuristicSummarySnapshot = {
+    base_url: '',
+    model: '离线启发式',
+    has_api_key: false
+  };
 
   const dispatch = createEventDispatcher<{
     submit: void;
@@ -97,7 +102,11 @@
 
   $: selectedProvider = aiSettings.selected_provider;
   $: providerSnapshot =
-    selectedProvider === 'openrouter' ? aiSettings.openrouter : aiSettings.openai_compatible;
+    selectedProvider === 'heuristic'
+      ? heuristicSummarySnapshot
+      : selectedProvider === 'openrouter'
+        ? aiSettings.openrouter
+        : aiSettings.openai_compatible;
   $: providerStatus =
     selectedProvider === 'heuristic'
       ? '离线模式，无需额外配置'

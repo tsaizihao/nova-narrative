@@ -221,13 +221,15 @@ describe('ImportScreen', () => {
 
     expect(screen.getByText('AI 设置')).toBeInTheDocument();
     expect(screen.getByText('OpenRouter')).toBeInTheDocument();
+    expect(screen.getByText('配置已就绪')).toBeInTheDocument();
     expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.getByText('已保存')).toBeInTheDocument();
     expect(screen.getByText('去设置页补全和管理你的模型配置。')).toBeInTheDocument();
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Base URL')).not.toBeInTheDocument();
   });
 
-  it('keeps the build button enabled when text is present even if external config is incomplete', () => {
+  it('shows incomplete external config summary text and keeps the build button enabled when text is present', () => {
     render(ImportScreen, {
       props: {
         projectName: '临川夜话',
@@ -247,7 +249,41 @@ describe('ImportScreen', () => {
       }
     });
 
+    expect(screen.getByText('配置未完成')).toBeInTheDocument();
+    expect(screen.getByText('未保存')).toBeInTheDocument();
+    expect(screen.getByText('未设置模型')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '开始解析与改编' })).toBeEnabled();
+  });
+
+  it('shows heuristic-specific summary text without leaking stale external model data', () => {
+    render(ImportScreen, {
+      props: {
+        projectName: '临川夜话',
+        novelText: '第1章 雨夜来客',
+        busy: false,
+        error: '',
+        aiSettings: {
+          selected_provider: 'heuristic',
+          openai_compatible: {
+            base_url: 'https://example.com/v1',
+            model: 'stale-external-model',
+            has_api_key: true
+          },
+          openrouter: {
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'openai/gpt-4o-mini',
+            has_api_key: true
+          }
+        },
+        resumableProjects: []
+      }
+    });
+
+    expect(screen.getByText('启发式（离线）')).toBeInTheDocument();
+    expect(screen.getByText('离线模式，无需额外配置')).toBeInTheDocument();
+    expect(screen.getByText('离线启发式')).toBeInTheDocument();
+    expect(screen.getByText('不需要')).toBeInTheDocument();
+    expect(screen.queryByText('stale-external-model')).not.toBeInTheDocument();
   });
 
   it('emits openSettings when the summary-card action is clicked', async () => {
