@@ -35,9 +35,17 @@ vi.mock('$lib/components/AiSettingsPanel.svelte', async () => {
   const actual = await vi.importActual<typeof import('$lib/components/AiSettingsPanel.svelte')>(
     '$lib/components/AiSettingsPanel.svelte'
   );
+  type RealPanel = typeof actual.default;
+  type PanelEventMap = {
+    saveAiSettings?: () => void;
+    clearProviderApiKey?: (event: { detail: string }) => void;
+  };
+  type MockablePanelProps = Parameters<RealPanel>[1] & {
+    $$events?: PanelEventMap;
+  };
 
   return {
-    default: function MockableAiSettingsPanel($$anchor: Node, $$props: Record<string, unknown>) {
+    default: function MockableAiSettingsPanel($$anchor: Node, $$props: MockablePanelProps) {
       if (!mocks.panelControl.forceEventEmitter) {
         return actual.default($$anchor, $$props);
       }
@@ -46,32 +54,34 @@ vi.mock('$lib/components/AiSettingsPanel.svelte', async () => {
       saveButton.type = 'button';
       saveButton.textContent = '强制保存';
       saveButton.addEventListener('click', () => {
-        const eventHandler = ($$props.$$events as { saveAiSettings?: () => void })?.saveAiSettings;
-        eventHandler?.();
+        $$props.$$events?.saveAiSettings?.();
       });
 
       const clearButton = document.createElement('button');
       clearButton.type = 'button';
       clearButton.textContent = '强制清除';
       clearButton.addEventListener('click', () => {
-        const eventHandler = ($$props.$$events as { clearProviderApiKey?: (event: { detail: string }) => void })
-          ?.clearProviderApiKey;
-        eventHandler?.({ detail: 'openrouter' });
+        $$props.$$events?.clearProviderApiKey?.({ detail: 'openrouter' });
       });
 
       const errorText = document.createElement('p');
       const syncError = () => {
-        const nextError = Reflect.get($$props, 'error');
+        const nextError = Reflect.get($$props, 'error') as string | (() => string) | undefined;
         errorText.textContent = typeof nextError === 'function' ? nextError() : String(nextError ?? '');
       };
+      const parent = $$anchor.parentNode;
+
+      if (!parent) {
+        return;
+      }
 
       syncError();
       queueMicrotask(syncError);
       setTimeout(syncError, 0);
 
-      $$anchor.before(saveButton);
-      $$anchor.before(clearButton);
-      $$anchor.before(errorText);
+      parent.insertBefore(saveButton, $$anchor);
+      parent.insertBefore(clearButton, $$anchor);
+      parent.insertBefore(errorText, $$anchor);
     }
   };
 });
