@@ -110,6 +110,18 @@ describe('/settings route', () => {
     expect(await screen.findByText('加载 AI 设置失败')).toBeInTheDocument();
 
     expect(screen.getByLabelText('接口类型')).toBeDisabled();
-    expect(screen.getByRole('button', { name: '保存接口设置' })).toBeDisabled();
+    const saveButton = screen.getByRole('button', { name: '保存接口设置' });
+    expect(saveButton).toBeDisabled();
+
+    await fireEvent.click(saveButton);
+
+    const clearButton = screen.queryByRole('button', { name: '清除已存密钥' });
+    if (clearButton) {
+      expect(clearButton).toBeDisabled();
+      await fireEvent.click(clearButton);
+    }
+
+    expect(mocks.settingsBackend.saveAiSettings).not.toHaveBeenCalled();
+    expect(mocks.settingsBackend.clearProviderApiKey).not.toHaveBeenCalled();
   });
 });
