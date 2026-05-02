@@ -53,6 +53,7 @@ vi.mock('$lib/modules/settings/backend', () => mocks.settingsBackend);
 
 import Page from './+page.svelte';
 import { CommandClientError } from '$lib/backend/commandClient';
+import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
 
 const aiSettings: AppAiSettingsSnapshot = {
   selected_provider: 'heuristic',
@@ -270,6 +271,19 @@ describe('+page build flow', () => {
     });
   });
 
+  it('starts with an empty import form until the user explicitly loads the sample', async () => {
+    render(Page);
+
+    const projectNameInput = await screen.findByRole('textbox', { name: '项目名称' });
+    const novelTextInput = screen.getByRole('textbox', { name: '小说正文' });
+    const submitButton = screen.getByRole('button', { name: '开始解析与改编' });
+
+    expect(projectNameInput).toHaveValue('');
+    expect(novelTextInput).toHaveValue('');
+    expect(submitButton).toBeDisabled();
+    expect(screen.queryByDisplayValue(SAMPLE_PROJECT_NAME)).not.toBeInTheDocument();
+  });
+
   it('shows imported build status immediately and then enters review with the real build result', async () => {
     const buildReady: BuildStatus = {
       stage: 'ready',
@@ -325,6 +339,61 @@ describe('+page build flow', () => {
       expect(screen.getByTestId('review-stage-shell')).toBeInTheDocument();
     });
     expect(mocks.projectBackend.getProject).toHaveBeenCalledWith('project-1');
+  });
+
+  it('reuses an identical saved project instead of creating a duplicate one', async () => {
+    const builtProject = createProjectSnapshot({
+      id: 'project-existing',
+      name: SAMPLE_PROJECT_NAME,
+      raw_text: SAMPLE_NOVEL,
+      build_status: {
+        stage: 'ready',
+        message: 'Story package ready',
+        progress: 100
+      },
+      story_package: {
+        story_bible: {
+          title: SAMPLE_PROJECT_NAME,
+          characters: [],
+          locations: [],
+          timeline: [],
+          world_rules: [],
+          relationships: [],
+          core_conflicts: []
+        },
+        world_model: {
+          character_cards: [],
+          worldbook_entries: [],
+          rules: []
+        },
+        start_scene_id: 'scene-1',
+        scenes: {}
+      }
+    });
+
+    mocks.projectBackend.listSavedProjects.mockResolvedValue([
+      {
+        project: builtProject,
+        session_id: null,
+        current_scene_title: null,
+        ending_type: null,
+        last_activity_at: Date.now(),
+        last_activity_kind: 'project'
+      }
+    ]);
+
+    render(Page);
+
+    await fireEvent.click(await screen.findByRole('button', { name: '载入示例' }));
+    await fireEvent.click(screen.getByRole('button', { name: '开始解析与改编' }));
+
+    await screen.findByTestId('review-stage-shell');
+
+    expect(mocks.projectBackend.createProject).not.toHaveBeenCalled();
+    expect(mocks.projectBackend.importNovelText).not.toHaveBeenCalled();
+    expect(mocks.projectBackend.buildStoryPackage).not.toHaveBeenCalled();
+    expect(mocks.projectBackend.getProject).not.toHaveBeenCalled();
+    expect(screen.getByText(SAMPLE_PROJECT_NAME)).toBeInTheDocument();
   });
 
   it('keeps the build screen visible when the real build request fails', async () => {

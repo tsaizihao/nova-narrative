@@ -27,8 +27,8 @@
 
   let phase: Phase = 'import';
   let stepperPhase: StepperPhase = 'import';
-  let projectName = SAMPLE_PROJECT_NAME;
-  let novelText = SAMPLE_NOVEL;
+  let projectName = '';
+  let novelText = '';
   let project: NovelProject | null = null;
   let resumableProjects: SavedProjectCardEntry[] = [];
   let readerLayoutMode: ReaderLayoutMode = 'desktop';
@@ -71,6 +71,27 @@
   };
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
+
+  function normalizeImportedText(text: string) {
+    return text
+      .replaceAll('\r\n', '\n')
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .join('\n')
+      .trim();
+  }
+
+  function findReusableProject(name: string, text: string) {
+    const normalizedName = name.trim();
+    const normalizedText = normalizeImportedText(text);
+
+    return resumableProjects.find((entry) => {
+      return (
+        entry.project.name.trim() === normalizedName &&
+        normalizeImportedText(entry.project.raw_text) === normalizedText
+      );
+    });
+  }
 
   function normalizeSessionStatus(status?: SessionStatus | null): SessionStatus {
     return status ?? 'active';
@@ -173,6 +194,12 @@
 
   async function initializeStory() {
     if (!projectName.trim() || !novelText.trim()) return;
+
+    const reusableProject = findReusableProject(projectName, novelText);
+    if (reusableProject) {
+      await openExistingProject(reusableProject.project.id);
+      return;
+    }
 
     busy = true;
     error = '';
