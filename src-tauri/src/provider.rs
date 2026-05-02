@@ -195,10 +195,7 @@ impl FakeChatCompletionsTransport {
     }
 
     pub fn requests(&self) -> Vec<CapturedChatCompletionsRequest> {
-        self.requests
-            .lock()
-            .expect("requests lock")
-            .clone()
+        self.requests.lock().expect("requests lock").clone()
     }
 }
 
@@ -288,15 +285,19 @@ fn analyze_external_provider(
         AiProviderKind::Heuristic => {
             return Err(AppError::Validation(
                 "heuristic provider does not use external API settings".into(),
-            ))
+            ));
         }
     };
 
     if provider_settings.base_url.trim().is_empty() {
-        return Err(AppError::Validation("External provider base URL is required".into()));
+        return Err(AppError::Validation(
+            "External provider base URL is required".into(),
+        ));
     }
     if provider_settings.model.trim().is_empty() {
-        return Err(AppError::Validation("External provider model is required".into()));
+        return Err(AppError::Validation(
+            "External provider model is required".into(),
+        ));
     }
 
     let api_key = secret_store
@@ -316,7 +317,8 @@ fn analyze_external_provider(
         }
     }
 
-    Err(last_error.unwrap_or_else(|| AppError::Provider("failed to parse provider response".into())))
+    Err(last_error
+        .unwrap_or_else(|| AppError::Provider("failed to parse provider response".into())))
 }
 
 fn build_chat_request(
@@ -503,14 +505,19 @@ struct RuleDefinitionDraft {
     explanation: String,
 }
 
-fn parse_external_analysis(project: &NovelProject, raw_response: &str) -> AppResult<ExtractedWorldModel> {
-    let envelope: ChatCompletionEnvelope =
-        serde_json::from_str(raw_response).map_err(|error| AppError::Provider(error.to_string()))?;
+fn parse_external_analysis(
+    project: &NovelProject,
+    raw_response: &str,
+) -> AppResult<ExtractedWorldModel> {
+    let envelope: ChatCompletionEnvelope = serde_json::from_str(raw_response)
+        .map_err(|error| AppError::Provider(error.to_string()))?;
     let content = envelope
         .choices
         .first()
         .map(|choice| choice.message.content.as_str())
-        .ok_or_else(|| AppError::Provider("provider response did not include any choices".into()))?;
+        .ok_or_else(|| {
+            AppError::Provider("provider response did not include any choices".into())
+        })?;
 
     let draft_json = unwrap_json_payload(content);
     let draft: AiAnalysisDraft =
@@ -521,29 +528,45 @@ fn parse_external_analysis(project: &NovelProject, raw_response: &str) -> AppRes
 
 fn unwrap_json_payload(content: &str) -> &str {
     let trimmed = content.trim();
-    if let Some(inner) = trimmed.strip_prefix("```json").and_then(|value| value.strip_suffix("```")) {
+    if let Some(inner) = trimmed
+        .strip_prefix("```json")
+        .and_then(|value| value.strip_suffix("```"))
+    {
         inner.trim()
-    } else if let Some(inner) = trimmed.strip_prefix("```").and_then(|value| value.strip_suffix("```")) {
+    } else if let Some(inner) = trimmed
+        .strip_prefix("```")
+        .and_then(|value| value.strip_suffix("```"))
+    {
         inner.trim()
     } else {
         trimmed
     }
 }
 
-fn materialize_analysis(project: &NovelProject, draft: AiAnalysisDraft) -> AppResult<ExtractedWorldModel> {
-    let character_cards = materialize_character_cards(&draft.character_cards, &draft.story_bible.characters)?;
+fn materialize_analysis(
+    project: &NovelProject,
+    draft: AiAnalysisDraft,
+) -> AppResult<ExtractedWorldModel> {
+    let character_cards =
+        materialize_character_cards(&draft.character_cards, &draft.story_bible.characters)?;
     if character_cards.is_empty() {
-        return Err(AppError::Provider("provider response did not include any character cards".into()));
+        return Err(AppError::Provider(
+            "provider response did not include any character cards".into(),
+        ));
     }
 
     let worldbook_entries = materialize_worldbook_entries(draft.worldbook_entries)?;
     if worldbook_entries.is_empty() {
-        return Err(AppError::Provider("provider response did not include any worldbook entries".into()));
+        return Err(AppError::Provider(
+            "provider response did not include any worldbook entries".into(),
+        ));
     }
 
     let rules = materialize_rules(draft.rules)?;
     if rules.is_empty() {
-        return Err(AppError::Provider("provider response did not include any rules".into()));
+        return Err(AppError::Provider(
+            "provider response did not include any rules".into(),
+        ));
     }
 
     let story_bible = StoryBible {
@@ -572,7 +595,11 @@ fn materialize_character_cards(
     cards: &[CharacterCardDraft],
     fallback_cards: &[CharacterCardDraft],
 ) -> AppResult<Vec<CharacterCard>> {
-    let source = if cards.is_empty() { fallback_cards } else { cards };
+    let source = if cards.is_empty() {
+        fallback_cards
+    } else {
+        cards
+    };
     let mut materialized = Vec::new();
 
     for (index, card) in source.iter().enumerate() {
@@ -587,7 +614,7 @@ fn materialize_character_cards(
                 card.id.trim().to_string()
             },
             name: name.to_string(),
-            gender: fallback_string(&card.gender, "unknown"),
+            gender: normalize_gender_label(&fallback_string(&card.gender, "未知")),
             age: card.age,
             identity: card.identity.trim().to_string(),
             faction: card.faction.trim().to_string(),
@@ -604,7 +631,9 @@ fn materialize_character_cards(
     Ok(materialized)
 }
 
-fn materialize_worldbook_entries(entries: Vec<WorldBookEntryDraft>) -> AppResult<Vec<WorldBookEntry>> {
+fn materialize_worldbook_entries(
+    entries: Vec<WorldBookEntryDraft>,
+) -> AppResult<Vec<WorldBookEntry>> {
     Ok(entries
         .into_iter()
         .enumerate()
@@ -694,7 +723,10 @@ fn materialize_locations(locations: Vec<LocationCard>) -> Vec<LocationCard> {
         .collect()
 }
 
-fn materialize_timeline(project: &NovelProject, timeline: Vec<TimelineEntry>) -> Vec<TimelineEntry> {
+fn materialize_timeline(
+    project: &NovelProject,
+    timeline: Vec<TimelineEntry>,
+) -> Vec<TimelineEntry> {
     if !timeline.is_empty() {
         return timeline
             .into_iter()
@@ -726,7 +758,10 @@ fn materialize_timeline(project: &NovelProject, timeline: Vec<TimelineEntry>) ->
         .collect()
 }
 
-fn materialize_world_rules(rules: &[RuleDefinition], world_rules: Vec<WorldRule>) -> Vec<WorldRule> {
+fn materialize_world_rules(
+    rules: &[RuleDefinition],
+    world_rules: Vec<WorldRule>,
+) -> Vec<WorldRule> {
     if !world_rules.is_empty() {
         return world_rules
             .into_iter()
@@ -794,6 +829,15 @@ fn trim_vec(values: &[String]) -> Vec<String> {
         .collect()
 }
 
+fn normalize_gender_label(value: &str) -> String {
+    match value.trim() {
+        "male" | "男" => "男".into(),
+        "female" | "女" => "女".into(),
+        "unknown" | "未知" | "" => "未知".into(),
+        other => other.to_string(),
+    }
+}
+
 #[derive(Default)]
 pub struct HeuristicStoryProvider;
 
@@ -810,39 +854,17 @@ impl StoryAiProvider for HeuristicStoryProvider {
             .map(|(index, name)| CharacterCard {
                 id: format!("character-{}", index + 1),
                 name: name.clone(),
-                gender: match index {
-                    0 => "male",
-                    1 => "female",
-                    _ => "unknown",
-                }
-                .into(),
-                age: Some(20 + index as u16),
-                identity: match index {
-                    0 => "守门人",
-                    1 => "破局者",
-                    _ => "见证者",
-                }
-                .into(),
-                faction: if index % 2 == 0 { "临川城" } else { "门外之约" }.into(),
-                role: match index {
-                    0 => "主视角",
-                    1 => "关键同伴",
-                    2 => "守门人",
-                    _ => "重要角色",
-                }
-                .into(),
-                secrets: vec![format!("{name} 对北门的真正代价知情")],
-                traits: vec!["克制".into(), "警觉".into()],
-                abilities: vec!["记住规则".into(), "推动剧情".into()],
+                gender: infer_gender(text, name),
+                age: None,
+                identity: infer_identity(text, name),
+                faction: infer_faction(text, name),
+                role: infer_role(index),
+                secrets: infer_secrets(text, name),
+                traits: infer_traits(text, name),
+                abilities: infer_abilities(text, name),
                 mutable_state: [("trust".into(), "1".into())].into_iter().collect(),
-                summary: format!("{name} 是故事推进中的关键角色。"),
-                desire: match index {
-                    0 => "想要在真相与规训之间做出选择",
-                    1 => "想要唤醒沉睡的约定",
-                    2 => "想要守住故事既有秩序",
-                    _ => "想要改写当前局面",
-                }
-                .into(),
+                summary: infer_character_summary(text, name),
+                desire: infer_desire(text, name),
             })
             .collect::<Vec<_>>();
 
@@ -852,7 +874,7 @@ impl StoryAiProvider for HeuristicStoryProvider {
             .map(|(index, name)| LocationCard {
                 id: format!("location-{}", index + 1),
                 name: name.clone(),
-                summary: format!("{name} 是当前故事最有戏剧张力的地点之一。"),
+                summary: infer_location_summary(text, name),
             })
             .collect::<Vec<_>>();
 
@@ -908,8 +930,9 @@ impl StoryAiProvider for HeuristicStoryProvider {
             },
         }];
 
-        let rules = build_rules();
-        let worldbook_entries = build_worldbook_entries(&character_cards, &locations, &rule_sentences, &rules);
+        let rules = build_rules(&rule_sentences);
+        let worldbook_entries =
+            build_worldbook_entries(&character_cards, &locations, &rule_sentences, &rules);
         let story_bible = StoryBible {
             title: project.name.clone(),
             characters: character_cards.clone(),
@@ -929,94 +952,90 @@ impl StoryAiProvider for HeuristicStoryProvider {
     }
 }
 
-fn build_rules() -> Vec<RuleDefinition> {
-    vec![
-        RuleDefinition {
-            id: "rule-biology-1".into(),
-            name: "same-sex-cannot-conceive".into(),
-            category: "biology_rule".into(),
-            priority: RulePriority::HardConstraint,
-            enabled: true,
-            conditions: vec![
-                RuleCondition {
-                    fact: "event.kind".into(),
-                    operator: RuleOperator::Equals,
-                    value: "sexual_relation".into(),
-                },
-                RuleCondition {
-                    fact: "actor.gender".into(),
-                    operator: RuleOperator::Equals,
-                    value: "male".into(),
-                },
-                RuleCondition {
-                    fact: "target.gender".into(),
-                    operator: RuleOperator::Equals,
-                    value: "male".into(),
-                },
-            ],
-            blockers: Vec::new(),
-            effects: vec![RuleEffect {
-                key: "possibility.conception".into(),
-                value: "false".into(),
-            }],
-            explanation: "两个男性不能自然生育".into(),
-        },
-        RuleDefinition {
-            id: "rule-biology-2".into(),
-            name: "mixed-sex-can-conceive".into(),
-            category: "biology_rule".into(),
-            priority: RulePriority::Consequence,
-            enabled: true,
-            conditions: vec![
-                RuleCondition {
-                    fact: "event.kind".into(),
-                    operator: RuleOperator::Equals,
-                    value: "sexual_relation".into(),
-                },
-                RuleCondition {
-                    fact: "actor.gender".into(),
-                    operator: RuleOperator::Equals,
-                    value: "male".into(),
-                },
-                RuleCondition {
-                    fact: "target.gender".into(),
-                    operator: RuleOperator::Equals,
-                    value: "female".into(),
-                },
-            ],
-            blockers: Vec::new(),
-            effects: vec![RuleEffect {
-                key: "possibility.conception".into(),
-                value: "true".into(),
-            }],
-            explanation: "一男一女发生关系时存在怀孕可能".into(),
-        },
-        RuleDefinition {
-            id: "rule-gate-1".into(),
-            name: "north-gate-midnight-forbidden".into(),
-            category: "social_rule".into(),
-            priority: RulePriority::HardConstraint,
-            enabled: true,
-            conditions: vec![
-                RuleCondition {
-                    fact: "event.kind".into(),
-                    operator: RuleOperator::Equals,
-                    value: "open_gate".into(),
-                },
-                RuleCondition {
+fn build_rules(rule_sentences: &[String]) -> Vec<RuleDefinition> {
+    let mut rules = rule_sentences
+        .iter()
+        .enumerate()
+        .map(|(index, sentence)| {
+            let event_kind = infer_rule_event_kind(sentence);
+            let blocked = sentence.contains("不能")
+                || sentence.contains("不得")
+                || sentence.contains("不可")
+                || sentence.contains("严禁")
+                || sentence.contains("绝不");
+            let priority = if blocked {
+                RulePriority::HardConstraint
+            } else if sentence.contains("必须") || sentence.contains("须") {
+                RulePriority::SoftConstraint
+            } else {
+                RulePriority::Consequence
+            };
+            let mut conditions = vec![RuleCondition {
+                fact: "event.kind".into(),
+                operator: RuleOperator::Equals,
+                value: event_kind.clone(),
+            }];
+
+            if sentence.contains("午夜") || sentence.contains("夜里") || sentence.contains("夜间")
+            {
+                conditions.push(RuleCondition {
                     fact: "scene.time".into(),
                     operator: RuleOperator::Equals,
                     value: "midnight".into(),
+                });
+            }
+
+            RuleDefinition {
+                id: format!("rule-{}", index + 1),
+                name: format!("heuristic-rule-{}", index + 1),
+                category: if sentence.contains("男") && sentence.contains("女") {
+                    "biology_rule".into()
+                } else {
+                    "social_rule".into()
                 },
-            ],
+                priority,
+                enabled: true,
+                conditions,
+                blockers: Vec::new(),
+                effects: vec![RuleEffect {
+                    key: if blocked {
+                        "event.forbidden".into()
+                    } else {
+                        "event.notice".into()
+                    },
+                    value: if blocked {
+                        "true".into()
+                    } else {
+                        "active".into()
+                    },
+                }],
+                explanation: sentence.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if rules.is_empty() {
+        rules.push(RuleDefinition {
+            id: "rule-1".into(),
+            name: "heuristic-rule-1".into(),
+            category: "social_rule".into(),
+            priority: RulePriority::SoftConstraint,
+            enabled: true,
+            conditions: vec![RuleCondition {
+                fact: "input.text".into(),
+                operator: RuleOperator::Contains,
+                value: "规则".into(),
+            }],
             blockers: Vec::new(),
             effects: vec![RuleEffect {
-                key: "event.forbidden".into(),
-                value: "true".into(),
+                key: "event.notice".into(),
+                value: "active".into(),
             }],
-            explanation: "午夜之后绝不能打开北门".into(),
-        },
-    ]
+            explanation: "正文里提到需要遵守某些规矩或约束。".into(),
+        });
+    }
+
+    rules
 }
 
 fn build_worldbook_entries(
@@ -1032,7 +1051,10 @@ fn build_worldbook_entries(
             id: format!("lore-character-{}", index + 1),
             title: format!("角色卡：{}", character.name),
             category: WorldBookCategory::Character,
-            content: format!("{}，{}，欲望：{}", character.identity, character.summary, character.desire),
+            content: format!(
+                "{}，{}，欲望：{}",
+                character.identity, character.summary, character.desire
+            ),
             enabled: true,
             keys: vec![character.name.clone()],
             secondary_keys: vec![character.identity.clone()],
@@ -1057,42 +1079,42 @@ fn build_worldbook_entries(
         })
         .collect::<Vec<_>>();
 
-    entries.extend(locations.iter().enumerate().map(|(index, location)| WorldBookEntry {
-        id: format!("lore-location-{}", index + 1),
-        title: format!("地点：{}", location.name),
-        category: WorldBookCategory::Location,
-        content: location.summary.clone(),
-        enabled: true,
-        keys: vec![location.name.clone()],
-        secondary_keys: vec!["雨".into(), "门".into()],
-        selective_logic: WorldBookSelectiveLogic::AndAny,
-        constant: false,
-        recursive: index == 0,
-        exclude_recursion: false,
-        prevent_recursion: false,
-        delay_until_recursion: None,
-        scan_depth: Some(4),
-        case_sensitive: Some(false),
-        match_whole_words: Some(false),
-        sticky: None,
-        cooldown: Some(1),
-        delay: None,
-        triggers: vec!["scene".into()],
-        ignore_budget: false,
-        order: 10 + index as i32,
-        insertion_mode: WorldBookInsertionMode::ScenePrelude,
-        source: "location".into(),
-        rule_binding: None,
-    }));
+    entries.extend(
+        locations
+            .iter()
+            .enumerate()
+            .map(|(index, location)| WorldBookEntry {
+                id: format!("lore-location-{}", index + 1),
+                title: format!("地点：{}", location.name),
+                category: WorldBookCategory::Location,
+                content: location.summary.clone(),
+                enabled: true,
+                keys: vec![location.name.clone()],
+                secondary_keys: vec!["雨".into(), "门".into()],
+                selective_logic: WorldBookSelectiveLogic::AndAny,
+                constant: false,
+                recursive: index == 0,
+                exclude_recursion: false,
+                prevent_recursion: false,
+                delay_until_recursion: None,
+                scan_depth: Some(4),
+                case_sensitive: Some(false),
+                match_whole_words: Some(false),
+                sticky: None,
+                cooldown: Some(1),
+                delay: None,
+                triggers: vec!["scene".into()],
+                ignore_budget: false,
+                order: 10 + index as i32,
+                insertion_mode: WorldBookInsertionMode::ScenePrelude,
+                source: "location".into(),
+                rule_binding: None,
+            }),
+    );
 
     entries.extend(rule_sentences.iter().enumerate().map(|(index, sentence)| {
-        let keys = if sentence.contains("北门") {
-            vec!["北门".into(), "门".into()]
-        } else if sentence.contains("旧约") {
-            vec!["旧约".into(), "真相".into()]
-        } else {
-            vec!["规则".into()]
-        };
+        let keys = extract_keywords(sentence, 3);
+        let rule_binding = rules.get(index).map(|rule| rule.id.clone());
 
         WorldBookEntry {
             id: format!("lore-rule-{}", index + 1),
@@ -1100,8 +1122,12 @@ fn build_worldbook_entries(
             category: WorldBookCategory::SocialRule,
             content: sentence.clone(),
             enabled: true,
-            keys,
-            secondary_keys: vec!["午夜".into(), "雾".into()],
+            keys: if keys.is_empty() {
+                vec!["规则".into()]
+            } else {
+                keys
+            },
+            secondary_keys: Vec::new(),
             selective_logic: WorldBookSelectiveLogic::AndAny,
             constant: false,
             recursive: true,
@@ -1119,66 +1145,286 @@ fn build_worldbook_entries(
             order: 20 + index as i32,
             insertion_mode: WorldBookInsertionMode::RulesGuard,
             source: "rule_sentence".into(),
-            rule_binding: if sentence.contains("北门") {
-                Some("rule-gate-1".into())
-            } else {
-                None
-            },
+            rule_binding,
         }
     }));
 
-    entries.extend(rules.iter().enumerate().map(|(index, rule)| WorldBookEntry {
-        id: format!("lore-rulebinding-{}", index + 1),
-        title: format!("规则摘要：{}", rule.name),
-        category: if rule.category.contains("biology") {
-            WorldBookCategory::BiologyRule
-        } else {
-            WorldBookCategory::SocialRule
-        },
-        content: rule.explanation.clone(),
-        enabled: true,
-        keys: match rule.id.as_str() {
-            "rule-biology-1" => vec!["男男".into(), "两个男性".into()],
-            "rule-biology-2" => vec!["一男一女".into(), "发生关系".into()],
-            _ => vec!["午夜".into(), "北门".into()],
-        },
-        secondary_keys: Vec::new(),
-        selective_logic: WorldBookSelectiveLogic::AndAny,
-        constant: false,
-        recursive: false,
-        exclude_recursion: false,
-        prevent_recursion: false,
-        delay_until_recursion: None,
-        scan_depth: Some(4),
-        case_sensitive: Some(false),
-        match_whole_words: Some(false),
-        sticky: None,
-        cooldown: None,
-        delay: if rule.id == "rule-gate-1" { Some(1) } else { None },
-        triggers: vec!["free_input".into(), "choice".into()],
-        ignore_budget: false,
-        order: 40 + index as i32,
-        insertion_mode: WorldBookInsertionMode::RulesGuard,
-        source: "rule_definition".into(),
-        rule_binding: Some(rule.id.clone()),
+    entries.extend(rules.iter().enumerate().map(|(index, rule)| {
+        WorldBookEntry {
+            id: format!("lore-rulebinding-{}", index + 1),
+            title: format!("规则摘要：{}", rule.name),
+            category: if rule.category.contains("biology") {
+                WorldBookCategory::BiologyRule
+            } else {
+                WorldBookCategory::SocialRule
+            },
+            content: rule.explanation.clone(),
+            enabled: true,
+            keys: {
+                let extracted = extract_keywords(&rule.explanation, 3);
+                if extracted.is_empty() {
+                    vec!["规则".into()]
+                } else {
+                    extracted
+                }
+            },
+            secondary_keys: Vec::new(),
+            selective_logic: WorldBookSelectiveLogic::AndAny,
+            constant: false,
+            recursive: false,
+            exclude_recursion: false,
+            prevent_recursion: false,
+            delay_until_recursion: None,
+            scan_depth: Some(4),
+            case_sensitive: Some(false),
+            match_whole_words: Some(false),
+            sticky: None,
+            cooldown: None,
+            delay: if rule
+                .effects
+                .iter()
+                .any(|effect| effect.key == "event.forbidden" && effect.value == "true")
+            {
+                Some(1)
+            } else {
+                None
+            },
+            triggers: vec!["free_input".into(), "choice".into()],
+            ignore_budget: false,
+            order: 40 + index as i32,
+            insertion_mode: WorldBookInsertionMode::RulesGuard,
+            source: "rule_definition".into(),
+            rule_binding: Some(rule.id.clone()),
+        }
     }));
 
     entries
 }
 
+fn infer_gender(text: &str, name: &str) -> String {
+    let context = collect_character_context(text, name);
+    if context.contains("娘子")
+        || context.contains("夫人")
+        || context.contains("小姐")
+        || context.contains("她")
+    {
+        return "女".into();
+    }
+    if context.contains("汉子")
+        || context.contains("哥哥")
+        || context.contains("好汉")
+        || context.contains("他")
+    {
+        return "男".into();
+    }
+    "未知".into()
+}
+
+fn infer_identity(text: &str, name: &str) -> String {
+    extract_identity_from_context(text, name).unwrap_or_else(|| "书中人物".into())
+}
+
+fn infer_faction(text: &str, name: &str) -> String {
+    extract_location_near_name(text, name).unwrap_or_else(|| "所属势力待考".into())
+}
+
+fn infer_role(index: usize) -> String {
+    match index {
+        0 => "核心人物".into(),
+        1 => "关键人物".into(),
+        _ => "相关人物".into(),
+    }
+}
+
+fn infer_character_summary(text: &str, name: &str) -> String {
+    first_sentence_for_name(text, name)
+        .unwrap_or_else(|| format!("{name} 是正文中反复出现的角色。"))
+}
+
+fn infer_desire(text: &str, name: &str) -> String {
+    let context = collect_character_context(text, name);
+    if context.contains("要") || context.contains("欲") || context.contains("想") {
+        for marker in ["想", "要", "欲"] {
+            if let Some((_, tail)) = context.split_once(marker) {
+                let candidate = tail.trim();
+                if !candidate.is_empty() {
+                    return format!("希望{}", candidate.chars().take(18).collect::<String>());
+                }
+            }
+        }
+    }
+    "其主要动机仍需结合正文细化。".into()
+}
+
+fn infer_secrets(text: &str, name: &str) -> Vec<String> {
+    let context = collect_character_context(text, name);
+    if context.contains("暗") || context.contains("密") || context.contains("不敢") {
+        vec![format!("{name} 似乎藏有未明说的内情。")]
+    } else {
+        Vec::new()
+    }
+}
+
+fn infer_traits(text: &str, name: &str) -> Vec<String> {
+    let context = collect_character_context(text, name);
+    let mut traits = Vec::new();
+    if context.contains("喝道") || context.contains("叫道") {
+        traits.push("刚烈".into());
+    }
+    if context.contains("笑道") {
+        traits.push("从容".into());
+    }
+    if context.contains("低声") || context.contains("沉吟") {
+        traits.push("谨慎".into());
+    }
+    traits
+}
+
+fn infer_abilities(text: &str, name: &str) -> Vec<String> {
+    let context = collect_character_context(text, name);
+    let mut abilities = Vec::new();
+    if context.contains("商议") || context.contains("说道") {
+        abilities.push("议事".into());
+    }
+    if context.contains("喝道") || context.contains("拿下") {
+        abilities.push("应战".into());
+    }
+    abilities
+}
+
+fn infer_location_summary(text: &str, name: &str) -> String {
+    first_sentence_for_name(text, name)
+        .unwrap_or_else(|| format!("{name} 是正文中被反复提及的地点。"))
+}
+
+fn infer_rule_event_kind(sentence: &str) -> String {
+    if sentence.contains("开门") || sentence.contains("门前") || sentence.contains("入门") {
+        "open_gate".into()
+    } else if sentence.contains("发生关系") || sentence.contains("男") && sentence.contains("女")
+    {
+        "sexual_relation".into()
+    } else {
+        "free_input".into()
+    }
+}
+
+fn extract_keywords(sentence: &str, limit: usize) -> Vec<String> {
+    let keyword_re = Regex::new(r"[一-龥]{2,6}").expect("keyword regex must compile");
+    let stopwords = [
+        "必须", "不能", "不得", "不可", "只要", "然后", "于是", "众人", "有人", "规则", "正文",
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let mut keywords = Vec::new();
+    for capture in keyword_re.captures_iter(sentence) {
+        let candidate = capture[0].trim();
+        if stopwords.contains(candidate) {
+            continue;
+        }
+        if keywords.iter().any(|existing| existing == candidate) {
+            continue;
+        }
+        keywords.push(candidate.to_string());
+        if keywords.len() >= limit {
+            break;
+        }
+    }
+    keywords
+}
+
+fn collect_character_context(text: &str, name: &str) -> String {
+    text.lines()
+        .filter(|line| line.contains(name))
+        .take(3)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn first_sentence_for_name(text: &str, name: &str) -> Option<String> {
+    text.split(['。', '！', '？', '\n'])
+        .map(str::trim)
+        .find(|sentence| !sentence.is_empty() && sentence.contains(name))
+        .map(|sentence| sentence.to_string())
+}
+
+fn extract_identity_from_context(text: &str, name: &str) -> Option<String> {
+    let context = collect_character_context(text, name);
+    for suffix in [
+        "教头", "头领", "寨主", "好汉", "员外", "太守", "知府", "军师", "都头", "英雄",
+    ] {
+        let pattern = format!("{name}{suffix}");
+        if context.contains(&pattern) {
+            return Some(suffix.to_string());
+        }
+    }
+    None
+}
+
+fn extract_location_near_name(text: &str, name: &str) -> Option<String> {
+    let location_re = Regex::new(r"([一-龥]{1,8}(?:山寨|梁山泊|东京|州|府|县|庄|寺|堂|寨|营|关))")
+        .expect("location-near-name regex must compile");
+    for line in text.lines().filter(|line| line.contains(name)) {
+        if let Some(capture) = location_re.captures(line) {
+            return Some(capture[1].to_string());
+        }
+    }
+    None
+}
+
 fn extract_character_names(text: &str) -> Vec<String> {
     let stopwords = [
-        "临川城", "北门", "旧约", "真相", "钟声", "火把", "午夜", "城规", "名字", "雨幕",
-        "他们", "她们", "我们", "你们", "有人", "众人", "自己", "城中", "门前", "门外",
+        "临川城",
+        "北门",
+        "旧约",
+        "真相",
+        "钟声",
+        "火把",
+        "午夜",
+        "城规",
+        "名字",
+        "雨幕",
+        "他们",
+        "她们",
+        "我们",
+        "你们",
+        "有人",
+        "众人",
+        "自己",
+        "城中",
+        "门前",
+        "门外",
     ]
     .into_iter()
     .collect::<BTreeSet<_>>();
     let speaker_re = Regex::new(
-        r"([一-龥]{2,3})(?:就|便|还|又|再|仍|都)?(?:说|问|看|听|想|站|走|来到|看见|知道|决定|低声问|低声|抬头|守住|打开)",
+        r"([一-龥]{2,4})(?:就|便|还|又|再|仍|都)?(?:说|问|看|听|想|站|走|来到|看见|知道|决定|低声问|低声|抬头|守住|打开|道|喝道|叫道|说道|笑道|骂道|答道|商议)",
     )
     .expect("character regex must compile");
+    let titled_name_re =
+        Regex::new(r"(?:教头|头领|寨主|好汉|员外|太守|知府|军师|都头)([一-龥]{2,3})")
+            .expect("titled name regex must compile");
+    let listed_name_re =
+        Regex::new(r"([一-龥]{2,3})(?:、|，)").expect("listed name regex must compile");
     let mut counts = HashMap::<String, usize>::new();
     for capture in speaker_re.captures_iter(text) {
+        let Some(candidate) = sanitize_character_candidate(&capture[1], &stopwords) else {
+            continue;
+        };
+        if !stopwords.contains(candidate.as_str()) {
+            *counts.entry(candidate).or_insert(0) += 1;
+        }
+    }
+
+    for capture in titled_name_re.captures_iter(text) {
+        let Some(candidate) = sanitize_character_candidate(&capture[1], &stopwords) else {
+            continue;
+        };
+        if !stopwords.contains(candidate.as_str()) {
+            *counts.entry(candidate).or_insert(0) += 2;
+        }
+    }
+
+    for capture in listed_name_re.captures_iter(text) {
         let Some(candidate) = sanitize_character_candidate(&capture[1], &stopwords) else {
             continue;
         };
@@ -1193,7 +1439,7 @@ fn extract_character_names(text: &str) -> Vec<String> {
     if names.is_empty() {
         names = vec!["主角".into(), "引路人".into(), "守门人".into()];
     }
-    names.truncate(4);
+    names.truncate(12);
     names
 }
 
@@ -1220,9 +1466,12 @@ fn extract_rule_sentences(text: &str) -> Vec<String> {
         .map(str::trim)
         .filter(|sentence| {
             !sentence.is_empty()
-                && ["必须", "不能", "不得", "只要", "规则", "城规", "禁"]
-                    .iter()
-                    .any(|keyword| sentence.contains(keyword))
+                && [
+                    "必须", "不能", "不得", "只要", "规则", "城规", "禁", "不可", "须", "不许",
+                    "严禁",
+                ]
+                .iter()
+                .any(|keyword| sentence.contains(keyword))
         })
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
@@ -1231,7 +1480,7 @@ fn extract_rule_sentences(text: &str) -> Vec<String> {
     if rules.is_empty() {
         rules.push("必须遵守既有约定，否则代价会立刻显现".into());
     }
-    rules.truncate(4);
+    rules.truncate(12);
     rules
 }
 
@@ -1241,18 +1490,32 @@ fn sanitize_character_candidate(candidate: &str, stopwords: &BTreeSet<&str>) -> 
         return None;
     }
 
-    let normalized = if trimmed.chars().count() == 3 {
-        let chars = trimmed.chars().collect::<Vec<_>>();
-        if "就便还又再仍都".contains(chars[2]) {
-            chars[..2].iter().collect::<String>()
-        } else {
-            trimmed.to_string()
+    let mut normalized = trimmed.to_string();
+    for suffix in [
+        "说道", "喝道", "叫道", "笑道", "骂道", "答道", "商议", "低声", "说道", "嚷道", "说道",
+        "喝", "叫", "说", "嚷", "道",
+    ] {
+        if normalized.ends_with(suffix) {
+            normalized = normalized.trim_end_matches(suffix).to_string();
         }
+    }
+
+    let chars = normalized.chars().collect::<Vec<_>>();
+    normalized = if chars.len() >= 3 && "就便还又再仍都".contains(*chars.last().unwrap_or(&' '))
+    {
+        chars[..chars.len() - 1].iter().collect::<String>()
     } else {
-        trimmed.to_string()
+        normalized
     };
 
-    if !(2..=3).contains(&normalized.chars().count()) {
+    if normalized.chars().count() > 3 {
+        let first = normalized.chars().next()?;
+        if COMMON_CHINESE_SURNAMES.contains(first) {
+            normalized = normalized.chars().take(3).collect();
+        }
+    }
+
+    if !(2..=4).contains(&normalized.chars().count()) {
         return None;
     }
     if stopwords.contains(normalized.as_str()) {
@@ -1293,12 +1556,14 @@ fn sanitize_location_candidate(candidate: &str) -> Option<String> {
     Some(normalized)
 }
 
-const COMMON_CHINESE_SURNAMES: &str =
-    "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳酆鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于时傅皮卞齐康伍余元卜顾孟平黄和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁杜阮蓝闵席季麻强贾路娄危江童颜郭梅盛林刁钟徐丘骆高夏蔡田樊胡凌霍虞万支柯昝管卢莫经房裘缪干解应宗丁宣贲邓郁单杭洪包诸左石崔吉钮龚程嵇邢滑裴陆荣翁荀羊於惠甄曲家封芮羿储靳汲邴糜松井段富巫乌焦巴弓牧隗山谷车侯宓蓬全郗班仰秋仲伊宫宁仇栾暴甘厉戎祖武符刘景詹束龙叶幸司韶郜黎蓟薄印宿白怀蒲邰从鄂索咸籍赖卓蔺屠蒙池乔阴胥能苍双闻莘党翟谭贡劳逄姬申扶堵冉宰郦雍却璩桑桂濮牛寿通边扈燕冀郏浦尚农温别庄晏柴瞿阎充慕连茹习宦艾鱼容向古易慎戈廖庾终暨居衡步都耿满弘匡国文寇广禄阙东欧";
+const COMMON_CHINESE_SURNAMES: &str = "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳酆鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于时傅皮卞齐康伍余元卜顾孟平黄和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴谈宋茅庞熊纪舒屈项祝董梁杜阮蓝闵席季麻强贾路娄危江童颜郭梅盛林刁钟徐丘骆高夏蔡田樊胡凌霍虞万支柯昝管卢莫经房裘缪干解应宗丁宣贲邓郁单杭洪包诸左石崔吉钮龚程嵇邢滑裴陆荣翁荀羊於惠甄曲家封芮羿储靳汲邴糜松井段富巫乌焦巴弓牧隗山谷车侯宓蓬全郗班仰秋仲伊宫宁仇栾暴甘厉戎祖武符刘景詹束龙叶幸司韶郜黎蓟薄印宿白怀蒲邰从鄂索咸籍赖卓蔺屠蒙池乔阴胥能苍双闻莘党翟谭贡劳逄姬申扶堵冉宰郦雍却璩桑桂濮牛寿通边扈燕冀郏浦尚农温别庄晏柴瞿阎充慕连茹习宦艾鱼容向古易慎戈廖庾终暨居衡步都耿满弘匡国文寇广禄阙东欧";
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_character_names, extract_locations};
+    use super::{
+        HeuristicStoryProvider, StoryAiProvider, extract_character_names, extract_locations,
+    };
+    use crate::models::{BuildStatus, ChapterChunk, NovelProject};
 
     fn sample_text() -> &'static str {
         "第1章 雨夜来客\n\n临川城的钟声刚落，沈砚就看见雨幕中有人提灯而来。\n他知道城规只有一条，午夜之后绝不能打开北门。\n\n第2章 禁忌之门\n\n宁昭低声问他是否还记得旧约，沈砚没有回答。\n城中人都说，只要北门打开一次，河上的雾就会吞掉名字。\n\n第3章 选择\n\n他们站在门前，火把渐灭，钟声再次响起。\n沈砚必须决定，是遵守城规，还是向真相迈进一步。"
@@ -1322,5 +1587,96 @@ mod tests {
         assert!(locations.iter().any(|name| name == "北门"));
         assert!(locations.iter().all(|name| name != "之后绝不能打开北门"));
         assert!(locations.iter().all(|name| name != "他们站在门"));
+    }
+
+    fn heuristic_project(raw_text: &str) -> NovelProject {
+        NovelProject {
+            id: "project-1".into(),
+            name: "水浒传".into(),
+            raw_text: raw_text.into(),
+            chapters: vec![ChapterChunk {
+                id: "chapter-1".into(),
+                order: 1,
+                title: "第一回".into(),
+                content: raw_text.into(),
+                excerpt: raw_text.chars().take(40).collect(),
+                ..ChapterChunk::default()
+            }],
+            build_status: BuildStatus::default(),
+            ..NovelProject::default()
+        }
+    }
+
+    #[test]
+    fn heuristic_provider_outputs_chinese_gender_and_avoids_demo_world_defaults() {
+        let raw_text = [
+            "话说东京八十万禁军教头林冲，正自与鲁智深、武松、李逵、宋江商议梁山泊事务。",
+            "宋江道，梁山泊上下须守忠义，不可坏了弟兄情分。",
+            "武松喝道，若有奸邪作祟，须当即拿下。",
+            "李逵叫道，俺也去。",
+        ]
+        .join("\n");
+        let provider = HeuristicStoryProvider;
+        let result = provider
+            .analyze(&heuristic_project(&raw_text))
+            .expect("heuristic analysis");
+
+        assert!(!result.character_cards.is_empty());
+        assert!(
+            result
+                .character_cards
+                .iter()
+                .all(|card| matches!(card.gender.as_str(), "男" | "女" | "未知"))
+        );
+        assert!(
+            result
+                .character_cards
+                .iter()
+                .all(|card| card.identity != "守门人" && card.identity != "破局者")
+        );
+        assert!(
+            result
+                .character_cards
+                .iter()
+                .all(|card| card.faction != "临川城" && card.faction != "门外之约")
+        );
+        assert!(
+            result
+                .story_bible
+                .world_rules
+                .iter()
+                .all(|rule| !rule.description.contains("北门"))
+        );
+    }
+
+    #[test]
+    fn heuristic_provider_does_not_truncate_large_chinese_cast_or_rules_to_four() {
+        let raw_text = [
+            "宋江道，忠义为先，梁山泊上下不可自相残害。",
+            "林冲喝道，若有军令，众人不得违拗。",
+            "武松说道，见了不平之事，须当拔刀相助。",
+            "鲁智深叫道，山寨门前不得滋事，不许伤及百姓。",
+            "李逵嚷道，若有奸人潜入，必须立刻拿下。",
+            "吴用说道，但凡调兵遣将，须先禀明寨主。",
+            "柴进道，众头领不得私藏财货。",
+        ]
+        .join("\n");
+        let provider = HeuristicStoryProvider;
+        let result = provider
+            .analyze(&heuristic_project(&raw_text))
+            .expect("heuristic analysis");
+        let extracted_names = result
+            .character_cards
+            .iter()
+            .map(|card| card.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(extracted_names.contains(&"宋江"));
+        assert!(extracted_names.contains(&"林冲"));
+        assert!(extracted_names.contains(&"武松"));
+        assert!(extracted_names.contains(&"鲁智深"));
+        assert!(extracted_names.contains(&"李逵"));
+        assert!(result.character_cards.len() > 4);
+        assert!(result.story_bible.world_rules.len() > 4);
     }
 }

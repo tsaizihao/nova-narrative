@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     context_builder::{
-        activate_worldbook, advance_lifecycle, apply_activation_effects, build_composite_scan_buffer,
+        activate_worldbook, advance_lifecycle, apply_activation_effects,
+        build_composite_scan_buffer,
     },
     error::{AppError, AppResult},
     models::{
@@ -55,8 +56,15 @@ impl RuntimeEngine {
         Ok(session)
     }
 
-    pub fn get_current_scene(session: &SessionState, package: &StoryPackage) -> AppResult<ScenePayload> {
-        assemble_scene_payload(session, package, session.free_input_history.last().map(String::as_str))
+    pub fn get_current_scene(
+        session: &SessionState,
+        package: &StoryPackage,
+    ) -> AppResult<ScenePayload> {
+        assemble_scene_payload(
+            session,
+            package,
+            session.free_input_history.last().map(String::as_str),
+        )
     }
 
     pub fn submit_choice(
@@ -118,18 +126,21 @@ impl RuntimeEngine {
         };
 
         session.current_scene_id = next_scene_id.clone();
-        if !session.visited_scenes.iter().any(|visited| visited == &next_scene_id) {
+        if !session
+            .visited_scenes
+            .iter()
+            .any(|visited| visited == &next_scene_id)
+        {
             session.visited_scenes.push(next_scene_id.clone());
         }
 
         advance_lifecycle(&mut session.lore_lifecycle, &next_scene_id);
         refresh_scene_runtime(session, package, None)?;
 
-        let next_scene = package
-            .scenes
-            .get(&next_scene_id)
-            .cloned()
-            .ok_or_else(|| AppError::InvalidState(format!("missing next scene {next_scene_id}")))?;
+        let next_scene =
+            package.scenes.get(&next_scene_id).cloned().ok_or_else(|| {
+                AppError::InvalidState(format!("missing next scene {next_scene_id}"))
+            })?;
 
         if let Some(ending) = next_scene.ending.clone() {
             session.ending_report = Some(ending);
@@ -162,7 +173,9 @@ impl RuntimeEngine {
             .cloned()
             .ok_or_else(|| AppError::InvalidState("current scene is missing".into()))?;
         if !current_scene.allow_free_input {
-            return Err(AppError::InvalidState("current scene does not accept free input".into()));
+            return Err(AppError::InvalidState(
+                "current scene does not accept free input".into(),
+            ));
         }
 
         session.free_input_history.push(trimmed.to_string());
@@ -234,7 +247,11 @@ impl RuntimeEngine {
         session.lore_lifecycle = snapshot.lore_lifecycle.clone();
         session.last_active_rules = snapshot.last_active_rules.clone();
 
-        assemble_scene_payload(session, package, session.free_input_history.last().map(String::as_str))
+        assemble_scene_payload(
+            session,
+            package,
+            session.free_input_history.last().map(String::as_str),
+        )
     }
 
     pub fn preview_active_worldbook(
@@ -276,10 +293,13 @@ pub fn evaluate_rules(
     let mut blocked = false;
 
     for rule in rules.iter().filter(|rule| rule.enabled) {
-        let matches = rule
-            .conditions
-            .iter()
-            .all(|condition| compare_value(&fact_value(&input, &condition.fact), &condition.operator, &condition.value));
+        let matches = rule.conditions.iter().all(|condition| {
+            compare_value(
+                &fact_value(&input, &condition.fact),
+                &condition.operator,
+                &condition.value,
+            )
+        });
 
         if !matches {
             continue;
@@ -348,7 +368,12 @@ fn assemble_scene_payload(
             continue;
         }
 
-        if let Some(rule) = package.world_model.rules.iter().find(|rule| rule.id == rule_id) {
+        if let Some(rule) = package
+            .world_model
+            .rules
+            .iter()
+            .find(|rule| rule.id == rule_id)
+        {
             active_rules.push(ActiveRuleHit {
                 rule_id: rule.id.clone(),
                 name: rule.name.clone(),
@@ -433,7 +458,10 @@ fn refresh_scene_runtime(
         .iter()
         .map(|snapshot| snapshot.checkpoint.id.clone())
         .collect();
-    session.story_state.ending_report = session.ending_report.as_ref().map(|ending| ending.summary.clone());
+    session.story_state.ending_report = session
+        .ending_report
+        .as_ref()
+        .map(|ending| ending.summary.clone());
     dedupe_story_state(&mut session.story_state);
     Ok(())
 }
@@ -564,7 +592,8 @@ fn event_kind_from_choice(choice: &ChoiceOption) -> String {
 }
 
 fn event_kind_from_text(text: &str) -> String {
-    if text.contains("发生关系") || text.contains("发生了关系") || text.contains("上床") {
+    if text.contains("发生关系") || text.contains("发生了关系") || text.contains("上床")
+    {
         "sexual_relation".into()
     } else if text.contains("开门") {
         "open_gate".into()
@@ -575,7 +604,10 @@ fn event_kind_from_text(text: &str) -> String {
     }
 }
 
-fn default_actor_target(package: &StoryPackage, scene: &SceneNode) -> (CharacterCard, CharacterCard) {
+fn default_actor_target(
+    package: &StoryPackage,
+    scene: &SceneNode,
+) -> (CharacterCard, CharacterCard) {
     let actor = package
         .world_model
         .character_cards
@@ -592,7 +624,8 @@ fn default_actor_target(package: &StoryPackage, scene: &SceneNode) -> (Character
                 .character_cards
                 .iter()
                 .find(|character| {
-                    (&character.id == present || &character.name == present) && character.id != actor.id
+                    (&character.id == present || &character.name == present)
+                        && character.id != actor.id
                 })
                 .cloned()
         })
@@ -609,24 +642,31 @@ fn default_actor_target(package: &StoryPackage, scene: &SceneNode) -> (Character
     (actor, target)
 }
 
-fn genders_for_action(source_text: &str, actor: &CharacterCard, target: &CharacterCard) -> (String, String) {
+fn genders_for_action(
+    source_text: &str,
+    actor: &CharacterCard,
+    target: &CharacterCard,
+) -> (String, String) {
     if source_text.contains("一男一女") {
-        return ("male".into(), "female".into());
+        return ("男".into(), "女".into());
     }
     if source_text.contains("两个男性")
         || source_text.contains("两男")
         || source_text.contains("男男")
     {
-        return ("male".into(), "male".into());
+        return ("男".into(), "男".into());
     }
-    (actor.gender.clone(), target.gender.clone())
+    (
+        normalize_gender_value(&actor.gender),
+        normalize_gender_value(&target.gender),
+    )
 }
 
 fn fact_value(input: &RuleEvaluationInput, fact: &str) -> String {
     match fact {
         "event.kind" => input.event_kind.clone(),
-        "actor.gender" => input.actor_gender.clone(),
-        "target.gender" => input.target_gender.clone(),
+        "actor.gender" => normalize_gender_value(&input.actor_gender),
+        "target.gender" => normalize_gender_value(&input.target_gender),
         "scene.time" => {
             if input.source_text.contains("午夜") || input.scene_title.contains("午夜") {
                 "midnight".into()
@@ -642,16 +682,35 @@ fn fact_value(input: &RuleEvaluationInput, fact: &str) -> String {
 
 fn compare_value(left: &str, operator: &RuleOperator, right: &str) -> bool {
     match operator {
-        RuleOperator::Equals => left == right,
-        RuleOperator::NotEquals => left != right,
+        RuleOperator::Equals => normalize_compare_operand(left) == normalize_compare_operand(right),
+        RuleOperator::NotEquals => {
+            normalize_compare_operand(left) != normalize_compare_operand(right)
+        }
         RuleOperator::Contains => left.contains(right),
-        RuleOperator::GreaterThan => {
-            left.parse::<i64>().ok().zip(right.parse::<i64>().ok()).is_some_and(|(l, r)| l > r)
-        }
-        RuleOperator::LessThan => {
-            left.parse::<i64>().ok().zip(right.parse::<i64>().ok()).is_some_and(|(l, r)| l < r)
-        }
+        RuleOperator::GreaterThan => left
+            .parse::<i64>()
+            .ok()
+            .zip(right.parse::<i64>().ok())
+            .is_some_and(|(l, r)| l > r),
+        RuleOperator::LessThan => left
+            .parse::<i64>()
+            .ok()
+            .zip(right.parse::<i64>().ok())
+            .is_some_and(|(l, r)| l < r),
     }
+}
+
+fn normalize_gender_value(value: &str) -> String {
+    match value.trim() {
+        "male" | "男" => "男".into(),
+        "female" | "女" => "女".into(),
+        "unknown" | "未知" | "" => "未知".into(),
+        other => other.to_string(),
+    }
+}
+
+fn normalize_compare_operand(value: &str) -> String {
+    normalize_gender_value(value)
 }
 
 fn apply_rule_effect(story_state: &mut StoryState, effect: &RuleEffect) {
@@ -675,11 +734,11 @@ fn push_unique(items: &mut Vec<String>, value: String) {
 }
 
 fn append_fact(story_state: &mut StoryState, fact: FactRecord) {
-    if story_state
-        .fact_records
-        .iter()
-        .any(|candidate| candidate.subject == fact.subject && candidate.object == fact.object && candidate.value == fact.value)
-    {
+    if story_state.fact_records.iter().any(|candidate| {
+        candidate.subject == fact.subject
+            && candidate.object == fact.object
+            && candidate.value == fact.value
+    }) {
         return;
     }
     story_state.fact_records.push(fact);
@@ -700,11 +759,9 @@ fn dedupe_story_state(story_state: &mut StoryState) {
 
 #[cfg(test)]
 mod structured_rule_tests {
-    use crate::rules::{
-        RuleCondition, RuleDefinition, RuleEffect, RuleOperator, RulePriority,
-    };
+    use crate::rules::{RuleCondition, RuleDefinition, RuleEffect, RuleOperator, RulePriority};
 
-    use super::{evaluate_rules, RuleEvaluationInput};
+    use super::{RuleEvaluationInput, evaluate_rules};
 
     #[test]
     fn same_sex_relation_blocks_conception() {
@@ -761,7 +818,12 @@ mod structured_rule_tests {
                 .iter()
                 .any(|flag| flag == "possibility.conception=false")
         );
-        assert!(result.active_rules.iter().any(|hit| hit.rule_id == "rule-biology-1"));
+        assert!(
+            result
+                .active_rules
+                .iter()
+                .any(|hit| hit.rule_id == "rule-biology-1")
+        );
     }
 
     #[test]
@@ -819,7 +881,75 @@ mod structured_rule_tests {
                 .iter()
                 .any(|flag| flag == "possibility.conception=true")
         );
-        assert!(result.active_rules.iter().any(|hit| hit.rule_id == "rule-biology-2"));
+        assert!(
+            result
+                .active_rules
+                .iter()
+                .any(|hit| hit.rule_id == "rule-biology-2")
+        );
+    }
+
+    #[test]
+    fn chinese_gender_values_still_match_gender_rules() {
+        let rules = vec![RuleDefinition {
+            id: "rule-biology-2".into(),
+            name: "mixed-sex-can-conceive".into(),
+            category: "biology".into(),
+            priority: RulePriority::Consequence,
+            enabled: true,
+            conditions: vec![
+                RuleCondition {
+                    fact: "event.kind".into(),
+                    operator: RuleOperator::Equals,
+                    value: "sexual_relation".into(),
+                },
+                RuleCondition {
+                    fact: "actor.gender".into(),
+                    operator: RuleOperator::Equals,
+                    value: "male".into(),
+                },
+                RuleCondition {
+                    fact: "target.gender".into(),
+                    operator: RuleOperator::Equals,
+                    value: "female".into(),
+                },
+            ],
+            blockers: Vec::new(),
+            effects: vec![RuleEffect {
+                key: "possibility.conception".into(),
+                value: "true".into(),
+            }],
+            explanation: "一男一女发生关系时可能怀孕".into(),
+        }];
+
+        let result = evaluate_rules(
+            &crate::state::StoryState::default(),
+            &rules,
+            RuleEvaluationInput {
+                event_kind: "sexual_relation".into(),
+                actor_character_id: "shen".into(),
+                actor_gender: "男".into(),
+                target_character_id: "ning".into(),
+                target_gender: "女".into(),
+                source_text: "两人发生了关系".into(),
+                scene_title: "选择".into(),
+            },
+        )
+        .expect("evaluation");
+
+        assert!(
+            result
+                .story_state
+                .possibility_flags
+                .iter()
+                .any(|flag| flag == "possibility.conception=true")
+        );
+        assert!(
+            result
+                .active_rules
+                .iter()
+                .any(|hit| hit.rule_id == "rule-biology-2")
+        );
     }
 
     #[test]
@@ -866,6 +996,11 @@ mod structured_rule_tests {
         .expect("evaluation");
 
         assert!(result.blocked);
-        assert!(result.active_rules.iter().any(|hit| hit.rule_id == "rule-gate-1"));
+        assert!(
+            result
+                .active_rules
+                .iter()
+                .any(|hit| hit.rule_id == "rule-gate-1")
+        );
     }
 }

@@ -227,7 +227,7 @@ function buildCharacters(): CharacterCard[] {
     {
       id: 'character-1',
       name: '沈砚',
-      gender: 'male',
+      gender: '男',
       age: 22,
       identity: '守门人',
       faction: '临川城',
@@ -242,7 +242,7 @@ function buildCharacters(): CharacterCard[] {
     {
       id: 'character-2',
       name: '宁昭',
-      gender: 'female',
+      gender: '女',
       age: 21,
       identity: '破局者',
       faction: '门外之约',
@@ -257,7 +257,7 @@ function buildCharacters(): CharacterCard[] {
     {
       id: 'character-3',
       name: '城规',
-      gender: 'unknown',
+      gender: '未知',
       age: null,
       identity: '无形对手',
       faction: '临川城',
@@ -788,14 +788,16 @@ function evaluateRules(
   const activeRules: ActiveRuleHit[] = [];
   const nextState = clone(storyState);
   let blocked = false;
-  const resolvedActorGender = actorGender ?? 'male';
+  const resolvedActorGender = normalizeGender(actorGender ?? '男');
   const resolvedTargetGender =
-    targetGender ??
+    normalizeGender(
+      targetGender ??
     (sourceText.includes('一男一女')
-      ? 'female'
+      ? '女'
       : sourceText.includes('两个男性') || sourceText.includes('男男')
-        ? 'male'
-        : 'female');
+        ? '男'
+        : '女')
+    );
   const sceneTime = sourceText.includes('午夜') ? 'midnight' : 'day';
 
   for (const rule of storyPackage.world_model.rules) {
@@ -811,9 +813,9 @@ function evaluateRules(
               : condition.fact === 'scene.time'
                 ? sceneTime
                 : sourceText;
-      if (condition.operator === 'equals') return left === condition.value;
+      if (condition.operator === 'equals') return normalizeGender(left) === normalizeGender(condition.value);
       if (condition.operator === 'contains') return left.includes(condition.value);
-      if (condition.operator === 'not_equals') return left !== condition.value;
+      if (condition.operator === 'not_equals') return normalizeGender(left) !== normalizeGender(condition.value);
       return false;
     });
 
@@ -848,11 +850,18 @@ function evaluateRules(
   };
 }
 
+function normalizeGender(value: string) {
+  if (value === 'male' || value === '男') return '男';
+  if (value === 'female' || value === '女') return '女';
+  if (value === 'unknown' || value === '未知' || value === '') return '未知';
+  return value;
+}
+
 function createPreviewActorFallback() {
   return {
     id: '',
     name: '',
-    gender: 'unknown',
+    gender: '未知',
     age: null,
     identity: '',
     faction: '',

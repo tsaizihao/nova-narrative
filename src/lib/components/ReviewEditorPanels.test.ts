@@ -151,4 +151,19 @@ describe('review editor panels', () => {
     expect(within(footer).getByText('已与当前项目同步')).toBeInTheDocument();
     expect(within(footer).getByRole('button', { name: '保存更改' })).toBeInTheDocument();
   });
+
+  it('localizes legacy english gender values in the editor display', () => {
+    render(CharacterReviewPanel, {
+      props: {
+        cards: [{ ...character, gender: 'male' }],
+        activeId: 'c1',
+        draft: { ...character, gender: 'male' },
+        dirty: false,
+        saveBusy: false
+      }
+    });
+
+    expect(screen.getByDisplayValue('男')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('male')).not.toBeInTheDocument();
+  });
 });

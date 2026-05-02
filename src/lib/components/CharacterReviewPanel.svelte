@@ -23,6 +23,13 @@
       ...patch
     });
   }
+
+  function localizeGender(value: string) {
+    if (value === 'male') return '男';
+    if (value === 'female') return '女';
+    if (value === 'unknown') return '未知';
+    return value;
+  }
 </script>
 
 <section class="panel">
@@ -80,7 +87,7 @@
           <label>
             <span>性别</span>
             <input
-              value={draft.gender}
+              value={localizeGender(draft.gender)}
               on:input={(event) =>
                 updateDraft({ gender: (event.currentTarget as HTMLInputElement).value })}
             />
