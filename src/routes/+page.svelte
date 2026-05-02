@@ -24,6 +24,30 @@
 
   type Phase = 'import' | 'building' | 'review' | 'reader';
   type StepperPhase = Phase;
+  type WorkspacePhase = Phase;
+
+  interface ImportDraftSnapshot {
+    projectName: string;
+    novelText: string;
+    settingsPrompt: string | null;
+  }
+
+  interface WorkspaceContextSnapshot {
+    phase: WorkspacePhase;
+    projectId: string | null;
+    projectName: string;
+    sessionId: string | null;
+  }
+
+  const IMPORT_DRAFT_STORAGE_KEY = 'nova.import-draft';
+  const WORKSPACE_CONTEXT_STORAGE_KEY = 'nova.workspace-context';
+  const BUILD_RESUME_POLL_DELAY_MS = 50;
+
+  const EMPTY_IMPORT_DRAFT: ImportDraftSnapshot = {
+    projectName: '',
+    novelText: '',
+    settingsPrompt: null
+  };
 
   let phase: Phase = 'import';
   let stepperPhase: StepperPhase = 'import';
@@ -41,8 +65,10 @@
   let resumableSessionId: string | null = null;
   let resumableSessionStatus: SessionStatus | null = null;
   let error = '';
+  let settingsPrompt = '';
   let busy = false;
   let settingsBusy = false;
+  let buildResumeGeneration = 0;
   let aiSettings: AppAiSettingsSnapshot = {
     selected_provider: 'heuristic',
     openai_compatible: {
@@ -71,6 +97,106 @@
   };
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
+
+  function canUseStorage() {
+    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  }
+
+  function loadImportDraft(): ImportDraftSnapshot {
+    if (!canUseStorage()) return { ...EMPTY_IMPORT_DRAFT };
+
+    const raw = window.localStorage.getItem(IMPORT_DRAFT_STORAGE_KEY);
+    if (!raw) return { ...EMPTY_IMPORT_DRAFT };
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<ImportDraftSnapshot>;
+      return {
+        projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
+        novelText: typeof parsed.novelText === 'string' ? parsed.novelText : '',
+        settingsPrompt: typeof parsed.settingsPrompt === 'string' ? parsed.settingsPrompt : null
+      };
+    } catch {
+      return { ...EMPTY_IMPORT_DRAFT };
+    }
+  }
+
+  function saveImportDraft(snapshot: ImportDraftSnapshot) {
+    if (!canUseStorage()) return;
+    window.localStorage.setItem(IMPORT_DRAFT_STORAGE_KEY, JSON.stringify(snapshot));
+  }
+
+  function loadWorkspaceContext(): WorkspaceContextSnapshot | null {
+    if (!canUseStorage()) return null;
+
+    const raw = window.localStorage.getItem(WORKSPACE_CONTEXT_STORAGE_KEY);
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<WorkspaceContextSnapshot>;
+      if (
+        parsed.phase !== 'import' &&
+        parsed.phase !== 'building' &&
+        parsed.phase !== 'review' &&
+        parsed.phase !== 'reader'
+      ) {
+        return null;
+      }
+
+      return {
+        phase: parsed.phase,
+        projectId: typeof parsed.projectId === 'string' ? parsed.projectId : null,
+        projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
+        sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : null
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function clearWorkspaceContext() {
+    if (!canUseStorage()) return;
+    window.localStorage.removeItem(WORKSPACE_CONTEXT_STORAGE_KEY);
+  }
+
+  function persistImportDraft() {
+    saveImportDraft({
+      projectName,
+      novelText,
+      settingsPrompt: settingsPrompt || null
+    });
+  }
+
+  function hydrateImportDraft() {
+    const draft = loadImportDraft();
+    projectName = draft.projectName;
+    novelText = draft.novelText;
+    settingsPrompt = draft.settingsPrompt ?? '';
+  }
+
+  function activeProviderSnapshot(snapshot: AppAiSettingsSnapshot) {
+    return snapshot.selected_provider === 'openrouter'
+      ? snapshot.openrouter
+      : snapshot.openai_compatible;
+  }
+
+  function selectedProviderIsReady(snapshot: AppAiSettingsSnapshot) {
+    if (snapshot.selected_provider === 'heuristic') return true;
+
+    const provider = activeProviderSnapshot(snapshot);
+    return (
+      provider.base_url.trim().length > 0 &&
+      provider.model.trim().length > 0 &&
+      provider.has_api_key
+    );
+  }
+
+  async function waitForBuildResumePoll(generation: number) {
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, BUILD_RESUME_POLL_DELAY_MS);
+    });
+
+    return generation === buildResumeGeneration;
+  }
 
   function normalizeImportedText(text: string) {
     return text
@@ -123,6 +249,11 @@
   async function loadAiSettings() {
     aiSettings = await settingsBackend.getAiSettings();
     syncAiDraft(aiSettings);
+
+    if (settingsPrompt && selectedProviderIsReady(aiSettings)) {
+      settingsPrompt = '';
+      persistImportDraft();
+    }
   }
 
   async function loadResumableProjects() {
@@ -237,6 +368,83 @@
       }
     } finally {
       busy = false;
+    }
+  }
+
+  async function resumeBuildingWorkspace(projectId: string) {
+    if (buildStatus.stage === 'failed') return;
+
+    const resumeGeneration = ++buildResumeGeneration;
+
+    while (resumeGeneration === buildResumeGeneration) {
+      const nextStatus = await projectBackend.getBuildStatus(projectId);
+      if (resumeGeneration !== buildResumeGeneration) return;
+
+      buildStatus = nextStatus;
+
+      if (nextStatus.stage === 'ready') {
+        const refreshedProject = await projectBackend.getProject(projectId);
+        if (resumeGeneration !== buildResumeGeneration) return;
+
+        project = refreshedProject;
+        projectName = refreshedProject.name;
+        novelText = refreshedProject.raw_text;
+        syncProjectSessionState(await runtimeBackend.findProjectSession(projectId).catch(() => null));
+        error = '';
+        phase = 'review';
+        return;
+      }
+
+      if (nextStatus.stage === 'failed') {
+        phase = 'building';
+        return;
+      }
+
+      const shouldContinue = await waitForBuildResumePoll(resumeGeneration);
+      if (!shouldContinue) return;
+    }
+  }
+
+  async function restoreWorkspaceContext() {
+    const context = loadWorkspaceContext();
+    if (!context || !context.projectId || context.phase === 'import') return;
+
+    try {
+      const restoredProject = await projectBackend.getProject(context.projectId);
+      clearWorkspaceContext();
+
+      project = restoredProject;
+      projectName = restoredProject.name;
+      novelText = restoredProject.raw_text;
+      error = '';
+
+      if (context.phase === 'reader' && context.sessionId) {
+        activeSessionId = context.sessionId;
+        phase = 'reader';
+        return;
+      }
+
+      if (context.phase === 'review') {
+        syncProjectSessionState(await runtimeBackend.findProjectSession(restoredProject.id).catch(() => null));
+        phase = 'review';
+        return;
+      }
+
+      buildStatus = restoredProject.build_status;
+      phase = restoredProject.build_status.stage === 'ready' ? 'review' : 'building';
+
+      if (phase === 'review') {
+        syncProjectSessionState(await runtimeBackend.findProjectSession(restoredProject.id).catch(() => null));
+        return;
+      }
+
+      await resumeBuildingWorkspace(restoredProject.id);
+    } catch {
+      clearWorkspaceContext();
+      project = null;
+      activeSessionId = null;
+      syncProjectSessionState(null);
+      phase = 'import';
     }
   }
 
@@ -355,16 +563,23 @@
       readerLayoutMode = resolveReaderLayoutMode(window.innerWidth);
     };
 
+    hydrateImportDraft();
     void loadAiSettings().catch((caught) => {
       error = caught instanceof Error ? caught.message : '加载 AI 设置失败';
     });
     void loadResumableProjects().catch((caught) => {
       error = caught instanceof Error ? caught.message : '加载已有项目失败';
     });
+    void restoreWorkspaceContext().catch((caught) => {
+      error = caught instanceof Error ? caught.message : '恢复工作区失败';
+    });
     updateReaderLayout();
     window.addEventListener('resize', updateReaderLayout);
 
-    return () => window.removeEventListener('resize', updateReaderLayout);
+    return () => {
+      buildResumeGeneration += 1;
+      window.removeEventListener('resize', updateReaderLayout);
+    };
   });
 </script>
 
@@ -393,7 +608,7 @@
         {projectName}
         {novelText}
         {busy}
-        {error}
+        error={error || settingsPrompt}
         {resumableProjects}
         {aiSettings}
         {aiDraft}

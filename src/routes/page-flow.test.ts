@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     createProject: vi.fn(),
     importNovelText: vi.fn(),
     buildStoryPackage: vi.fn(),
+    getBuildStatus: vi.fn(),
     getProject: vi.fn(),
     listProjects: vi.fn(),
     listSavedProjects: vi.fn()
@@ -122,6 +123,26 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function installLocalStorageShim() {
+  const localStorageState = new Map<string, string>();
+
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => localStorageState.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        localStorageState.set(key, value);
+      },
+      removeItem: (key: string) => {
+        localStorageState.delete(key);
+      },
+      clear: () => {
+        localStorageState.clear();
+      }
+    }
+  });
+}
+
 function createScenePayload(overrides: Partial<ScenePayload> = {}): ScenePayload {
   return {
     scene: {
@@ -216,6 +237,7 @@ function createRuntimeSnapshot(overrides: Partial<RuntimeSnapshot> = {}): Runtim
 describe('+page build flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installLocalStorageShim();
 
     mocks.settingsBackend.getAiSettings.mockResolvedValue(aiSettings);
     mocks.settingsBackend.saveAiSettings.mockResolvedValue(aiSettings);
@@ -422,6 +444,132 @@ describe('+page build flow', () => {
     expect(await screen.findByText('生成中断')).toBeInTheDocument();
     expect(screen.getByText('生成失败')).toBeInTheDocument();
     expect(screen.queryByTestId('review-stage-shell')).not.toBeInTheDocument();
+  });
+
+  it('restores a building workspace and resumes into review when the build finishes', async () => {
+    const buildingProject = createProjectSnapshot({
+      build_status: {
+        stage: 'analyzing',
+        message: 'Parsing chapters',
+        progress: 45
+      }
+    });
+    const readyStatus: BuildStatus = {
+      stage: 'ready',
+      message: 'Story package ready',
+      progress: 100
+    };
+    const readyProject = createProjectSnapshot({
+      build_status: readyStatus,
+      story_package: {
+        story_bible: {
+          title: '示例小说',
+          characters: [],
+          locations: [],
+          timeline: [],
+          world_rules: [],
+          relationships: [],
+          core_conflicts: []
+        },
+        world_model: {
+          character_cards: [],
+          worldbook_entries: [],
+          rules: []
+        },
+        start_scene_id: 'scene-1',
+        scenes: {}
+      }
+    });
+
+    window.localStorage.setItem(
+      'nova.workspace-context',
+      JSON.stringify({
+        phase: 'building',
+        projectId: 'project-1',
+        projectName: '示例小说',
+        sessionId: null
+      })
+    );
+
+    mocks.projectBackend.getProject
+      .mockResolvedValueOnce(buildingProject)
+      .mockResolvedValueOnce(readyProject);
+    mocks.projectBackend.getBuildStatus
+      .mockResolvedValueOnce({
+        stage: 'compiling',
+        message: 'Compiling scenes',
+        progress: 80
+      })
+      .mockResolvedValueOnce(readyStatus);
+
+    render(Page);
+
+    expect(await screen.findByText('45% · Parsing chapters')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-stage-shell')).toBeInTheDocument();
+    });
+
+    expect(mocks.projectBackend.getBuildStatus).toHaveBeenCalledWith('project-1');
+    expect(mocks.projectBackend.getProject).toHaveBeenLastCalledWith('project-1');
+  });
+
+  it('clears stale workspace context when restoration fails', async () => {
+    window.localStorage.setItem(
+      'nova.workspace-context',
+      JSON.stringify({
+        phase: 'review',
+        projectId: 'missing-project',
+        projectName: '失效项目',
+        sessionId: null
+      })
+    );
+
+    mocks.projectBackend.getProject.mockRejectedValue(new Error('project missing'));
+
+    render(Page);
+
+    expect(await screen.findByRole('textbox', { name: '项目名称' })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem('nova.workspace-context')).toBeNull();
+    });
+
+    expect(screen.queryByTestId('review-stage-shell')).not.toBeInTheDocument();
+    expect(screen.queryByText('失效项目')).not.toBeInTheDocument();
+  });
+
+  it('clears a stale settings prompt after AI settings load is ready', async () => {
+    window.localStorage.setItem(
+      'nova.import-draft',
+      JSON.stringify({
+        projectName: '临川夜话',
+        novelText: '第1章 雨夜来客',
+        settingsPrompt: '请先补全 AI 设置'
+      })
+    );
+
+    mocks.settingsBackend.getAiSettings.mockResolvedValue({
+      selected_provider: 'openai_compatible',
+      openai_compatible: {
+        base_url: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        has_api_key: true
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: '',
+        has_api_key: false
+      }
+    } satisfies AppAiSettingsSnapshot);
+
+    render(Page);
+
+    expect(await screen.findByDisplayValue('临川夜话')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText('请先补全 AI 设置')).not.toBeInTheDocument();
+    });
   });
 
   it('enters review with aggregated preview owned by the review workspace', async () => {
