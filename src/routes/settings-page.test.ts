@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('$lib/modules/settings/backend', () => mocks.settingsBackend);
 vi.mock('$app/navigation', () => mocks.navigation);
 
-import SettingsPage from './+page.svelte';
+import SettingsPage from './settings/+page.svelte';
 
 describe('/settings route', () => {
   beforeEach(() => {
