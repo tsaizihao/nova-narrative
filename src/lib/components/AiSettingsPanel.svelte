@@ -207,7 +207,7 @@
 
   button {
     padding: 0.7rem 1rem;
-    border-radius: 999px;
+    border-radius: 12px;
     border: 1px solid #d8c9b7;
     font: inherit;
     font-weight: 600;
