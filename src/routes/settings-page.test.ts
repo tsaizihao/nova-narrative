@@ -23,17 +23,56 @@ const mocks = vi.hoisted(() => ({
   },
   navigation: {
     goto: vi.fn()
+  },
+  panelControl: {
+    forceClearEmitter: false
   }
 }));
 
 vi.mock('$lib/modules/settings/backend', () => mocks.settingsBackend);
 vi.mock('$app/navigation', () => mocks.navigation);
+vi.mock('$lib/components/AiSettingsPanel.svelte', async () => {
+  const actual = await vi.importActual<typeof import('$lib/components/AiSettingsPanel.svelte')>(
+    '$lib/components/AiSettingsPanel.svelte'
+  );
+
+  return {
+    default: function MockableAiSettingsPanel($$anchor: Node, $$props: Record<string, unknown>) {
+      if (!mocks.panelControl.forceClearEmitter) {
+        return actual.default($$anchor, $$props);
+      }
+
+      const clearButton = document.createElement('button');
+      clearButton.type = 'button';
+      clearButton.textContent = '强制清除';
+      clearButton.addEventListener('click', () => {
+        const eventHandler = ($$props.$$events as { clearProviderApiKey?: (event: { detail: string }) => void })
+          ?.clearProviderApiKey;
+        eventHandler?.({ detail: 'openrouter' });
+      });
+
+      const errorText = document.createElement('p');
+      const syncError = () => {
+        const nextError = Reflect.get($$props, 'error');
+        errorText.textContent = typeof nextError === 'function' ? nextError() : String(nextError ?? '');
+      };
+
+      syncError();
+      queueMicrotask(syncError);
+      setTimeout(syncError, 0);
+
+      $$anchor.before(clearButton);
+      $$anchor.before(errorText);
+    }
+  };
+});
 
 import SettingsPage from './settings/+page.svelte';
 
 describe('/settings route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.panelControl.forceClearEmitter = false;
 
     mocks.settingsBackend.getAiSettings.mockResolvedValue(snapshot);
     mocks.settingsBackend.saveAiSettings.mockResolvedValue(snapshot);
@@ -122,6 +161,19 @@ describe('/settings route', () => {
     }
 
     expect(mocks.settingsBackend.saveAiSettings).not.toHaveBeenCalled();
+    expect(mocks.settingsBackend.clearProviderApiKey).not.toHaveBeenCalled();
+  });
+
+  it('does not clear provider keys when a panel clear event fires after initial load failure', async () => {
+    mocks.settingsBackend.getAiSettings.mockRejectedValueOnce(new Error('加载 AI 设置失败'));
+    mocks.panelControl.forceClearEmitter = true;
+
+    render(SettingsPage);
+
+    expect(await screen.findByText('加载 AI 设置失败')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: '强制清除' }));
+
     expect(mocks.settingsBackend.clearProviderApiKey).not.toHaveBeenCalled();
   });
 });
