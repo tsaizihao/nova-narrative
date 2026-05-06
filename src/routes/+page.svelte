@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
   import { normalizeCommandError } from '$lib/backend/commandClient';
@@ -7,47 +8,29 @@
   import ReviewStageShell from '$lib/components/ReviewStageShell.svelte';
   import RuntimeStageShell from '$lib/components/RuntimeStageShell.svelte';
   import WorkspaceTopbar from '$lib/components/WorkspaceTopbar.svelte';
+  import {
+    clearImportDraft,
+    loadImportDraft,
+    saveImportDraft
+  } from '$lib/modules/import-draft/storage';
   import * as projectBackend from '$lib/modules/projects/backend';
   import { toSavedProjectCardEntry, type SavedProjectCardEntry } from '$lib/modules/projects/library';
   import * as runtimeBackend from '$lib/modules/runtime/backend';
   import * as settingsBackend from '$lib/modules/settings/backend';
-  import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
+  import {
+    clearWorkspaceContext,
+    loadWorkspaceContext,
+    saveWorkspaceContext,
+    type WorkspacePhase
+  } from '$lib/modules/workspace-context/storage';
   import { SAMPLE_NOVEL, SAMPLE_PROJECT_NAME } from '$lib/sample-novel';
-  import type {
-    AiProviderKind,
-    AppAiSettingsSnapshot,
-    BuildStatus,
-    NovelProject,
-    SaveAiSettingsInput,
-    SessionStatus,
-  } from '$lib/types';
+  import type { AppAiSettingsSnapshot, BuildStatus, NovelProject, SessionStatus } from '$lib/types';
+  import { resolveReaderLayoutMode, type ReaderLayoutMode } from '$lib/ui-layout';
 
-  type Phase = 'import' | 'building' | 'review' | 'reader';
+  type Phase = WorkspacePhase;
   type StepperPhase = Phase;
-  type WorkspacePhase = Phase;
 
-  interface ImportDraftSnapshot {
-    projectName: string;
-    novelText: string;
-    settingsPrompt: string | null;
-  }
-
-  interface WorkspaceContextSnapshot {
-    phase: WorkspacePhase;
-    projectId: string | null;
-    projectName: string;
-    sessionId: string | null;
-  }
-
-  const IMPORT_DRAFT_STORAGE_KEY = 'nova.import-draft';
-  const WORKSPACE_CONTEXT_STORAGE_KEY = 'nova.workspace-context';
   const BUILD_RESUME_POLL_DELAY_MS = 50;
-
-  const EMPTY_IMPORT_DRAFT: ImportDraftSnapshot = {
-    projectName: '',
-    novelText: '',
-    settingsPrompt: null
-  };
 
   let phase: Phase = 'import';
   let stepperPhase: StepperPhase = 'import';
@@ -65,9 +48,8 @@
   let resumableSessionId: string | null = null;
   let resumableSessionStatus: SessionStatus | null = null;
   let error = '';
-  let settingsPrompt = '';
   let busy = false;
-  let settingsBusy = false;
+  let settingsPrompt = '';
   let buildResumeGeneration = 0;
   let aiSettings: AppAiSettingsSnapshot = {
     selected_provider: 'heuristic',
@@ -82,121 +64,9 @@
       has_api_key: false
     }
   };
-  let aiDraft: SaveAiSettingsInput = {
-    selected_provider: 'heuristic',
-    openai_compatible: {
-      base_url: '',
-      model: '',
-      api_key: ''
-    },
-    openrouter: {
-      base_url: 'https://openrouter.ai/api/v1',
-      model: '',
-      api_key: ''
-    }
-  };
+  let aiSettingsLoadPromise: Promise<void> | null = null;
 
   const phaseLabels = ['导入', '构建', '审阅', '游玩'];
-
-  function canUseStorage() {
-    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
-  }
-
-  function loadImportDraft(): ImportDraftSnapshot {
-    if (!canUseStorage()) return { ...EMPTY_IMPORT_DRAFT };
-
-    const raw = window.localStorage.getItem(IMPORT_DRAFT_STORAGE_KEY);
-    if (!raw) return { ...EMPTY_IMPORT_DRAFT };
-
-    try {
-      const parsed = JSON.parse(raw) as Partial<ImportDraftSnapshot>;
-      return {
-        projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
-        novelText: typeof parsed.novelText === 'string' ? parsed.novelText : '',
-        settingsPrompt: typeof parsed.settingsPrompt === 'string' ? parsed.settingsPrompt : null
-      };
-    } catch {
-      return { ...EMPTY_IMPORT_DRAFT };
-    }
-  }
-
-  function saveImportDraft(snapshot: ImportDraftSnapshot) {
-    if (!canUseStorage()) return;
-    window.localStorage.setItem(IMPORT_DRAFT_STORAGE_KEY, JSON.stringify(snapshot));
-  }
-
-  function loadWorkspaceContext(): WorkspaceContextSnapshot | null {
-    if (!canUseStorage()) return null;
-
-    const raw = window.localStorage.getItem(WORKSPACE_CONTEXT_STORAGE_KEY);
-    if (!raw) return null;
-
-    try {
-      const parsed = JSON.parse(raw) as Partial<WorkspaceContextSnapshot>;
-      if (
-        parsed.phase !== 'import' &&
-        parsed.phase !== 'building' &&
-        parsed.phase !== 'review' &&
-        parsed.phase !== 'reader'
-      ) {
-        return null;
-      }
-
-      return {
-        phase: parsed.phase,
-        projectId: typeof parsed.projectId === 'string' ? parsed.projectId : null,
-        projectName: typeof parsed.projectName === 'string' ? parsed.projectName : '',
-        sessionId: typeof parsed.sessionId === 'string' ? parsed.sessionId : null
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  function clearWorkspaceContext() {
-    if (!canUseStorage()) return;
-    window.localStorage.removeItem(WORKSPACE_CONTEXT_STORAGE_KEY);
-  }
-
-  function persistImportDraft() {
-    saveImportDraft({
-      projectName,
-      novelText,
-      settingsPrompt: settingsPrompt || null
-    });
-  }
-
-  function hydrateImportDraft() {
-    const draft = loadImportDraft();
-    projectName = draft.projectName;
-    novelText = draft.novelText;
-    settingsPrompt = draft.settingsPrompt ?? '';
-  }
-
-  function activeProviderSnapshot(snapshot: AppAiSettingsSnapshot) {
-    return snapshot.selected_provider === 'openrouter'
-      ? snapshot.openrouter
-      : snapshot.openai_compatible;
-  }
-
-  function selectedProviderIsReady(snapshot: AppAiSettingsSnapshot) {
-    if (snapshot.selected_provider === 'heuristic') return true;
-
-    const provider = activeProviderSnapshot(snapshot);
-    return (
-      provider.base_url.trim().length > 0 &&
-      provider.model.trim().length > 0 &&
-      provider.has_api_key
-    );
-  }
-
-  async function waitForBuildResumePoll(generation: number) {
-    await new Promise<void>((resolve) => {
-      window.setTimeout(resolve, BUILD_RESUME_POLL_DELAY_MS);
-    });
-
-    return generation === buildResumeGeneration;
-  }
 
   function normalizeImportedText(text: string) {
     return text
@@ -230,25 +100,55 @@
     resumableSessionStatus = session ? normalizeSessionStatus(session.status) : null;
   }
 
-  function syncAiDraft(snapshot: AppAiSettingsSnapshot) {
-    aiDraft = {
-      selected_provider: snapshot.selected_provider,
-      openai_compatible: {
-        base_url: snapshot.openai_compatible.base_url,
-        model: snapshot.openai_compatible.model,
-        api_key: ''
-      },
-      openrouter: {
-        base_url: snapshot.openrouter.base_url || 'https://openrouter.ai/api/v1',
-        model: snapshot.openrouter.model,
-        api_key: ''
-      }
-    };
+  function activeProviderSnapshot(snapshot: AppAiSettingsSnapshot) {
+    return snapshot.selected_provider === 'openrouter'
+      ? snapshot.openrouter
+      : snapshot.openai_compatible;
+  }
+
+  function selectedProviderIsReady(snapshot: AppAiSettingsSnapshot) {
+    if (snapshot.selected_provider === 'heuristic') return true;
+
+    const provider = activeProviderSnapshot(snapshot);
+    return (
+      provider.base_url.trim().length > 0 &&
+      provider.model.trim().length > 0 &&
+      provider.has_api_key
+    );
+  }
+
+  function persistImportDraft() {
+    saveImportDraft({
+      projectName,
+      novelText,
+      settingsPrompt: settingsPrompt || null
+    });
+  }
+
+  function hydrateImportDraft() {
+    const draft = loadImportDraft();
+    projectName = draft.projectName;
+    novelText = draft.novelText;
+    settingsPrompt = draft.settingsPrompt ?? '';
+  }
+
+  function saveCurrentWorkspaceContext(currentPhase: WorkspacePhase) {
+    saveWorkspaceContext({
+      phase: currentPhase,
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? projectName,
+      sessionId: activeSessionId
+    });
+  }
+
+  async function navigateToSettings(currentPhase: WorkspacePhase) {
+    persistImportDraft();
+    saveCurrentWorkspaceContext(currentPhase);
+    await goto('/settings');
   }
 
   async function loadAiSettings() {
     aiSettings = await settingsBackend.getAiSettings();
-    syncAiDraft(aiSettings);
 
     if (settingsPrompt && selectedProviderIsReady(aiSettings)) {
       settingsPrompt = '';
@@ -261,77 +161,27 @@
     resumableProjects = entries.map((entry) => toSavedProjectCardEntry(entry));
   }
 
-  function updateAiProvider(provider: AiProviderKind) {
-    aiDraft = {
-      ...aiDraft,
-      selected_provider: provider,
-      openrouter: {
-        ...aiDraft.openrouter,
-        base_url: aiDraft.openrouter.base_url || 'https://openrouter.ai/api/v1'
-      }
-    };
-  }
-
-  function updateActiveAiField(field: 'base_url' | 'model' | 'api_key', value: string) {
-    if (aiDraft.selected_provider === 'openrouter') {
-      aiDraft = {
-        ...aiDraft,
-        openrouter: {
-          ...aiDraft.openrouter,
-          [field]: value
-        }
-      };
-      return;
-    }
-
-    aiDraft = {
-      ...aiDraft,
-      openai_compatible: {
-        ...aiDraft.openai_compatible,
-        [field]: value
-      }
-    };
-  }
-
-  async function persistAiSettings() {
-    settingsBusy = true;
-    error = '';
-
-    try {
-      aiSettings = await settingsBackend.saveAiSettings(aiDraft);
-      syncAiDraft(aiSettings);
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : '保存 AI 接口设置失败';
-    } finally {
-      settingsBusy = false;
-    }
-  }
-
-  async function clearProviderApiKey(provider: AiProviderKind) {
-    if (provider === 'heuristic') return;
-
-    settingsBusy = true;
-    error = '';
-
-    try {
-      aiSettings = await settingsBackend.clearProviderApiKey(provider);
-      syncAiDraft(aiSettings);
-    } catch (caught) {
-      error = caught instanceof Error ? caught.message : '清除 API key 失败';
-    } finally {
-      settingsBusy = false;
-    }
-  }
-
   async function initializeStory() {
     if (!projectName.trim() || !novelText.trim()) return;
 
+    if (aiSettingsLoadPromise) {
+      await aiSettingsLoadPromise;
+    }
+
+    if (!selectedProviderIsReady(aiSettings)) {
+      settingsPrompt = '当前模型尚未完成配置，请先补全 AI 设置。';
+      await navigateToSettings('import');
+      return;
+    }
+
     const reusableProject = findReusableProject(projectName, novelText);
     if (reusableProject) {
+      clearWorkspaceContext();
       await openExistingProject(reusableProject.project.id);
       return;
     }
 
+    clearWorkspaceContext();
     busy = true;
     error = '';
     activeSessionId = null;
@@ -340,6 +190,7 @@
 
     try {
       project = await projectBackend.createProject(projectName.trim());
+      clearImportDraft();
       importedProject = await projectBackend.importNovelText(project.id, novelText.trim());
       project = importedProject;
 
@@ -369,6 +220,14 @@
     } finally {
       busy = false;
     }
+  }
+
+  async function waitForBuildResumePoll(generation: number) {
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, BUILD_RESUME_POLL_DELAY_MS);
+    });
+
+    return generation === buildResumeGeneration;
   }
 
   async function resumeBuildingWorkspace(projectId: string) {
@@ -502,9 +361,7 @@
       return;
     }
 
-    const resumableSession = await runtimeBackend
-      .findProjectSession(project.id)
-      .catch(() => null);
+    const resumableSession = await runtimeBackend.findProjectSession(project.id).catch(() => null);
     if (resumableSession) {
       syncProjectSessionState(resumableSession);
       activeSessionId = resumableSession.session_id;
@@ -564,9 +421,14 @@
     };
 
     hydrateImportDraft();
-    void loadAiSettings().catch((caught) => {
-      error = caught instanceof Error ? caught.message : '加载 AI 设置失败';
-    });
+    aiSettingsLoadPromise = loadAiSettings()
+      .catch((caught) => {
+        error = caught instanceof Error ? caught.message : '加载 AI 设置失败';
+      })
+      .finally(() => {
+        aiSettingsLoadPromise = null;
+      });
+
     void loadResumableProjects().catch((caught) => {
       error = caught instanceof Error ? caught.message : '加载已有项目失败';
     });
@@ -600,6 +462,9 @@
         phase={stepperPhase}
         labels={phaseLabels}
         showStepper={true}
+        showSettingsAction={true}
+        settingsActive={false}
+        on:openSettings={() => navigateToSettings(phase)}
       />
     {/if}
 
@@ -608,11 +473,10 @@
         {projectName}
         {novelText}
         {busy}
-        error={error || settingsPrompt}
+        {error}
         {resumableProjects}
         {aiSettings}
-        {aiDraft}
-        {settingsBusy}
+        {settingsPrompt}
         on:submit={initializeStory}
         on:sample={fillSample}
         on:fileLoaded={() => {
@@ -623,12 +487,7 @@
         }}
         on:updateProjectName={(event) => (projectName = event.detail)}
         on:updateNovelText={(event) => (novelText = event.detail)}
-        on:updateAiProvider={(event) => updateAiProvider(event.detail)}
-        on:updateAiBaseUrl={(event) => updateActiveAiField('base_url', event.detail)}
-        on:updateAiModel={(event) => updateActiveAiField('model', event.detail)}
-        on:updateAiApiKey={(event) => updateActiveAiField('api_key', event.detail)}
-        on:saveAiSettings={persistAiSettings}
-        on:clearProviderApiKey={(event) => clearProviderApiKey(event.detail)}
+        on:openSettings={() => navigateToSettings('import')}
         on:openProject={(event) => openExistingProject(event.detail)}
       />
     {:else if phase === 'building'}

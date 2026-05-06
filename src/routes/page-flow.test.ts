@@ -11,6 +11,10 @@ import type {
   StoryCodex
 } from '$lib/types';
 
+const navigation = vi.hoisted(() => ({
+  goto: vi.fn()
+}));
+
 const mocks = vi.hoisted(() => ({
   projectBackend: {
     createProject: vi.fn(),
@@ -47,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   }
 }));
 
+vi.mock('$app/navigation', () => navigation);
 vi.mock('$lib/modules/projects/backend', () => mocks.projectBackend);
 vi.mock('$lib/modules/review/backend', () => mocks.reviewBackend);
 vi.mock('$lib/modules/runtime/backend', () => mocks.runtimeBackend);
@@ -69,6 +74,31 @@ const aiSettings: AppAiSettingsSnapshot = {
     has_api_key: false
   }
 };
+
+function installMockLocalStorage() {
+  const storage = new Map<string, string>();
+  const localStorageMock = {
+    clear() {
+      storage.clear();
+    },
+    getItem(key: string) {
+      return storage.get(key) ?? null;
+    },
+    removeItem(key: string) {
+      storage.delete(key);
+    },
+    setItem(key: string, value: string) {
+      storage.set(key, value);
+    }
+  };
+
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: localStorageMock
+  });
+
+  return localStorageMock;
+}
 
 function createProjectSnapshot(overrides: Partial<NovelProject> = {}): NovelProject {
   return {
@@ -121,26 +151,6 @@ function deferred<T>() {
     reject = innerReject;
   });
   return { promise, resolve, reject };
-}
-
-function installLocalStorageShim() {
-  const localStorageState = new Map<string, string>();
-
-  Object.defineProperty(window, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key: string) => localStorageState.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        localStorageState.set(key, value);
-      },
-      removeItem: (key: string) => {
-        localStorageState.delete(key);
-      },
-      clear: () => {
-        localStorageState.clear();
-      }
-    }
-  });
 }
 
 function createScenePayload(overrides: Partial<ScenePayload> = {}): ScenePayload {
@@ -237,7 +247,8 @@ function createRuntimeSnapshot(overrides: Partial<RuntimeSnapshot> = {}): Runtim
 describe('+page build flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    installLocalStorageShim();
+    installMockLocalStorage();
+    window.localStorage.clear();
 
     mocks.settingsBackend.getAiSettings.mockResolvedValue(aiSettings);
     mocks.settingsBackend.saveAiSettings.mockResolvedValue(aiSettings);
@@ -304,6 +315,109 @@ describe('+page build flow', () => {
     expect(novelTextInput).toHaveValue('');
     expect(submitButton).toBeDisabled();
     expect(screen.queryByDisplayValue(SAMPLE_PROJECT_NAME)).not.toBeInTheDocument();
+  });
+
+  it('redirects to /settings instead of building when the selected external provider is incomplete', async () => {
+    mocks.settingsBackend.getAiSettings.mockResolvedValue({
+      selected_provider: 'openrouter',
+      openai_compatible: {
+        base_url: '',
+        model: '',
+        has_api_key: false
+      },
+      openrouter: {
+        base_url: 'https://openrouter.ai/api/v1',
+        model: '',
+        has_api_key: false
+      }
+    } satisfies AppAiSettingsSnapshot);
+
+    render(Page);
+
+    await fireEvent.input(await screen.findByRole('textbox', { name: '项目名称' }), {
+      target: { value: '临川夜话' }
+    });
+    await fireEvent.input(screen.getByRole('textbox', { name: '小说正文' }), {
+      target: { value: '第1章 雨夜来客' }
+    });
+    await fireEvent.click(screen.getByRole('button', { name: '开始解析与改编' }));
+
+    await waitFor(() => {
+      expect(navigation.goto).toHaveBeenCalledWith('/settings');
+    });
+    expect(mocks.projectBackend.createProject).not.toHaveBeenCalled();
+    expect(mocks.projectBackend.importNovelText).not.toHaveBeenCalled();
+    expect(mocks.projectBackend.buildStoryPackage).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('nova.import-draft')).toContain('临川夜话');
+  });
+
+  it('hydrates the import draft from browser storage before settings refresh clears stale prompts', async () => {
+    const settingsRequest = deferred<AppAiSettingsSnapshot>();
+    mocks.settingsBackend.getAiSettings.mockReturnValue(settingsRequest.promise);
+
+    window.localStorage.setItem(
+      'nova.import-draft',
+      JSON.stringify({
+        projectName: '临川夜话',
+        novelText: '第1章 雨夜来客',
+        settingsPrompt: '当前模型尚未完成配置，请先补全 AI 设置。'
+      })
+    );
+
+    render(Page);
+
+    expect(await screen.findByDisplayValue('临川夜话')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('第1章 雨夜来客')).toBeInTheDocument();
+    expect(screen.getByText('当前模型尚未完成配置，请先补全 AI 设置。')).toBeInTheDocument();
+
+    settingsRequest.resolve(aiSettings);
+  });
+
+  it('restores the review workspace after returning from settings with saved context', async () => {
+    window.localStorage.setItem(
+      'nova.workspace-context',
+      JSON.stringify({
+        phase: 'review',
+        projectId: 'project-1',
+        projectName: '示例小说',
+        sessionId: null
+      })
+    );
+
+    mocks.projectBackend.getProject.mockResolvedValue(
+      createProjectSnapshot({
+        build_status: {
+          stage: 'ready',
+          message: 'Story package ready',
+          progress: 100
+        },
+        story_package: {
+          story_bible: {
+            title: '示例小说',
+            characters: [],
+            locations: [],
+            timeline: [],
+            world_rules: [],
+            relationships: [],
+            core_conflicts: []
+          },
+          world_model: {
+            character_cards: [],
+            worldbook_entries: [],
+            rules: []
+          },
+          start_scene_id: 'scene-1',
+          scenes: {}
+        }
+      })
+    );
+
+    render(Page);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-stage-shell')).toBeInTheDocument();
+    });
+    expect(mocks.projectBackend.getProject).toHaveBeenCalledWith('project-1');
   });
 
   it('shows imported build status immediately and then enters review with the real build result', async () => {

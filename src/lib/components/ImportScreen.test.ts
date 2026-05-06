@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ImportScreen from './ImportScreen.svelte';
-import type { AppAiSettingsSnapshot, NovelProject, SaveAiSettingsInput } from '$lib/types';
+import type { AppAiSettingsSnapshot, NovelProject } from '$lib/types';
 
 describe('ImportScreen', () => {
   const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollHeight');
@@ -19,19 +19,6 @@ describe('ImportScreen', () => {
       base_url: 'https://openrouter.ai/api/v1',
       model: '',
       has_api_key: false
-    }
-  };
-  const aiDraft: SaveAiSettingsInput = {
-    selected_provider: 'heuristic',
-    openai_compatible: {
-      base_url: '',
-      model: '',
-      api_key: ''
-    },
-    openrouter: {
-      base_url: 'https://openrouter.ai/api/v1',
-      model: '',
-      api_key: ''
     }
   };
   const resumableProjects: Array<{
@@ -182,9 +169,7 @@ describe('ImportScreen', () => {
         busy: false,
         error: '',
         aiSettings,
-        aiDraft,
-        resumableProjects: [],
-        settingsBusy: false
+        resumableProjects: []
       }
     });
 
@@ -206,52 +191,129 @@ describe('ImportScreen', () => {
       busy: false,
       error: '',
       aiSettings,
-      aiDraft,
-      resumableProjects: [],
-      settingsBusy: false
+      resumableProjects: []
     });
     await tick();
 
     expect(textarea.style.height).toBe('320px');
   });
 
-  it('disables build for incomplete external provider settings and keeps heuristic one-click ready', async () => {
-    const { rerender } = render(ImportScreen, {
+  it('shows an AI settings summary card instead of the full provider form', () => {
+    render(ImportScreen, {
       props: {
         projectName: '临川夜话',
         novelText: '第1章 雨夜来客',
         busy: false,
         error: '',
-        aiSettings,
-        aiDraft: {
-          ...aiDraft,
+        aiSettings: {
+          ...aiSettings,
+          selected_provider: 'openrouter',
+          openrouter: {
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'openai/gpt-4o-mini',
+            has_api_key: true
+          }
+        },
+        resumableProjects: [],
+        settingsPrompt: '去设置页补全和管理你的模型配置。'
+      }
+    });
+
+    expect(screen.getByText('AI 设置')).toBeInTheDocument();
+    expect(screen.getByText('OpenRouter')).toBeInTheDocument();
+    expect(screen.getByText('配置已就绪')).toBeInTheDocument();
+    expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument();
+    expect(screen.getByText('已保存')).toBeInTheDocument();
+    expect(screen.getByText('去设置页补全和管理你的模型配置。')).toBeInTheDocument();
+    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Base URL')).not.toBeInTheDocument();
+  });
+
+  it('shows incomplete external config summary text and keeps the build button enabled when text is present', () => {
+    render(ImportScreen, {
+      props: {
+        projectName: '临川夜话',
+        novelText: '第1章 雨夜来客',
+        busy: false,
+        error: '',
+        aiSettings: {
+          ...aiSettings,
           selected_provider: 'openai_compatible',
           openai_compatible: {
             base_url: 'https://example.com/v1',
             model: '',
-            api_key: ''
+            has_api_key: false
           }
         },
-        resumableProjects: [],
-        settingsBusy: false
+        resumableProjects: []
       }
     });
 
-    expect(screen.getByRole('button', { name: '开始解析与改编' })).toBeDisabled();
-    expect(screen.getByText('需要填写 base URL、模型和 API key')).toBeInTheDocument();
+    expect(screen.getByText('配置未完成')).toBeInTheDocument();
+    expect(screen.getByText('未保存')).toBeInTheDocument();
+    expect(screen.getByText('未设置模型')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开始解析与改编' })).toBeEnabled();
+  });
 
-    await rerender({
-      projectName: '临川夜话',
-      novelText: '第1章 雨夜来客',
-      busy: false,
-      error: '',
-      aiSettings,
-      aiDraft,
-      resumableProjects: [],
-      settingsBusy: false
+  it('shows heuristic-specific summary text without leaking stale external model data', () => {
+    render(ImportScreen, {
+      props: {
+        projectName: '临川夜话',
+        novelText: '第1章 雨夜来客',
+        busy: false,
+        error: '',
+        aiSettings: {
+          selected_provider: 'heuristic',
+          openai_compatible: {
+            base_url: 'https://example.com/v1',
+            model: 'stale-external-model',
+            has_api_key: true
+          },
+          openrouter: {
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'openai/gpt-4o-mini',
+            has_api_key: true
+          }
+        },
+        resumableProjects: []
+      }
     });
 
-    expect(screen.getByRole('button', { name: '开始解析与改编' })).toBeEnabled();
+    expect(screen.getByText('启发式（离线）')).toBeInTheDocument();
+    expect(screen.getByText('离线模式，无需额外配置')).toBeInTheDocument();
+    expect(screen.getByText('离线启发式')).toBeInTheDocument();
+    expect(screen.getByText('不需要')).toBeInTheDocument();
+    expect(screen.queryByText('stale-external-model')).not.toBeInTheDocument();
+  });
+
+  it('emits openSettings when the summary-card action is clicked', async () => {
+    const openSettings = vi.fn();
+
+    render(ImportScreen, {
+      props: {
+        projectName: '临川夜话',
+        novelText: '第1章 雨夜来客',
+        busy: false,
+        error: '',
+        aiSettings: {
+          ...aiSettings,
+          selected_provider: 'openrouter',
+          openrouter: {
+            base_url: 'https://openrouter.ai/api/v1',
+            model: 'openai/gpt-4o-mini',
+            has_api_key: true
+          }
+        },
+        resumableProjects: []
+      },
+      events: {
+        openSettings
+      }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '去配置' }));
+
+    expect(openSettings).toHaveBeenCalledTimes(1);
   });
 
   it('renders a support rail so the desktop import view is not left with an empty column', () => {
@@ -262,9 +324,7 @@ describe('ImportScreen', () => {
         busy: false,
         error: '',
         aiSettings,
-        aiDraft,
-        resumableProjects: [],
-        settingsBusy: false
+        resumableProjects: []
       }
     });
 
@@ -281,9 +341,7 @@ describe('ImportScreen', () => {
         busy: false,
         error: '',
         aiSettings,
-        aiDraft,
-        resumableProjects,
-        settingsBusy: false
+        resumableProjects
       }
     });
 
@@ -319,9 +377,7 @@ describe('ImportScreen', () => {
         busy: false,
         error: '',
         aiSettings,
-        aiDraft,
-        resumableProjects: [],
-        settingsBusy: false
+        resumableProjects: []
       },
       events: {
         updateProjectName: (event) => updates.push(`name:${event.detail}`),
@@ -358,9 +414,7 @@ describe('ImportScreen', () => {
         busy: false,
         error: '',
         aiSettings,
-        aiDraft,
-        resumableProjects: [],
-        settingsBusy: false
+        resumableProjects: []
       },
       events: {
         fileError

@@ -1,0 +1,200 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const snapshot = {
+  selected_provider: 'openrouter',
+  openai_compatible: {
+    base_url: '',
+    model: '',
+    has_api_key: false
+  },
+  openrouter: {
+    base_url: 'https://openrouter.ai/api/v1',
+    model: 'openai/gpt-4o-mini',
+    has_api_key: true
+  }
+};
+
+const mocks = vi.hoisted(() => ({
+  settingsBackend: {
+    getAiSettings: vi.fn(),
+    saveAiSettings: vi.fn(),
+    clearProviderApiKey: vi.fn()
+  },
+  navigation: {
+    goto: vi.fn()
+  },
+  panelControl: {
+    forceEventEmitter: false
+  }
+}));
+
+vi.mock('$lib/modules/settings/backend', () => mocks.settingsBackend);
+vi.mock('$app/navigation', () => mocks.navigation);
+vi.mock('$lib/components/AiSettingsPanel.svelte', async () => {
+  const actual = await vi.importActual<typeof import('$lib/components/AiSettingsPanel.svelte')>(
+    '$lib/components/AiSettingsPanel.svelte'
+  );
+  type RealPanel = typeof actual.default;
+  type PanelEventMap = {
+    saveAiSettings?: () => void;
+    clearProviderApiKey?: (event: { detail: string }) => void;
+  };
+  type MockablePanelProps = Parameters<RealPanel>[1] & {
+    $$events?: PanelEventMap;
+  };
+
+  return {
+    default: function MockableAiSettingsPanel($$anchor: Node, $$props: MockablePanelProps) {
+      if (!mocks.panelControl.forceEventEmitter) {
+        return actual.default($$anchor, $$props);
+      }
+
+      const saveButton = document.createElement('button');
+      saveButton.type = 'button';
+      saveButton.textContent = '强制保存';
+      saveButton.addEventListener('click', () => {
+        $$props.$$events?.saveAiSettings?.();
+      });
+
+      const clearButton = document.createElement('button');
+      clearButton.type = 'button';
+      clearButton.textContent = '强制清除';
+      clearButton.addEventListener('click', () => {
+        $$props.$$events?.clearProviderApiKey?.({ detail: 'openrouter' });
+      });
+
+      const errorText = document.createElement('p');
+      const syncError = () => {
+        const nextError = Reflect.get($$props, 'error') as string | (() => string) | undefined;
+        errorText.textContent = typeof nextError === 'function' ? nextError() : String(nextError ?? '');
+      };
+      const parent = $$anchor.parentNode;
+
+      if (!parent) {
+        return;
+      }
+
+      syncError();
+      queueMicrotask(syncError);
+      setTimeout(syncError, 0);
+
+      parent.insertBefore(saveButton, $$anchor);
+      parent.insertBefore(clearButton, $$anchor);
+      parent.insertBefore(errorText, $$anchor);
+    }
+  };
+});
+
+import SettingsPage from './settings/+page.svelte';
+
+describe('/settings route', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.panelControl.forceEventEmitter = false;
+
+    mocks.settingsBackend.getAiSettings.mockResolvedValue(snapshot);
+    mocks.settingsBackend.saveAiSettings.mockResolvedValue(snapshot);
+    mocks.settingsBackend.clearProviderApiKey.mockResolvedValue(snapshot);
+  });
+
+  it('loads the AI settings panel and marks settings as active in the topbar', async () => {
+    render(SettingsPage);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'AI 设置'
+      })
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: '设置' })).toHaveAttribute('aria-pressed', 'true');
+
+    expect(await screen.findByText('已保存 API key')).toBeInTheDocument();
+  });
+
+  it('saves settings through the shared backend', async () => {
+    render(SettingsPage);
+
+    await screen.findByText('已保存 API key');
+
+    await fireEvent.input(screen.getByLabelText('模型'), {
+      target: { value: 'anthropic/claude-sonnet-4' }
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: '保存接口设置' }));
+
+    await waitFor(() => {
+      expect(mocks.settingsBackend.saveAiSettings).toHaveBeenCalledWith({
+        selected_provider: 'openrouter',
+        openai_compatible: {
+          base_url: '',
+          model: '',
+          api_key: ''
+        },
+        openrouter: {
+          base_url: 'https://openrouter.ai/api/v1',
+          model: 'anthropic/claude-sonnet-4',
+          api_key: ''
+        }
+      });
+    });
+  });
+
+  it('clears the saved API key for the selected provider', async () => {
+    render(SettingsPage);
+
+    await screen.findByText('已保存 API key');
+
+    await fireEvent.click(screen.getByRole('button', { name: '清除已存密钥' }));
+
+    expect(mocks.settingsBackend.clearProviderApiKey).toHaveBeenCalledWith('openrouter');
+  });
+
+  it('returns to the workspace when the back action is clicked', async () => {
+    render(SettingsPage);
+
+    await screen.findByText('已保存 API key');
+
+    await fireEvent.click(screen.getByRole('button', { name: '返回当前工作' }));
+
+    expect(mocks.navigation.goto).toHaveBeenCalledWith('/');
+  });
+
+  it('keeps settings actions disabled after an initial load failure', async () => {
+    mocks.settingsBackend.getAiSettings.mockRejectedValueOnce(new Error('加载 AI 设置失败'));
+
+    render(SettingsPage);
+
+    expect(await screen.findByText('加载 AI 设置失败')).toBeInTheDocument();
+
+    expect(screen.getByLabelText('接口类型')).toBeDisabled();
+    const saveButton = screen.getByRole('button', { name: '保存接口设置' });
+    expect(saveButton).toBeDisabled();
+
+    await fireEvent.click(saveButton);
+
+    const clearButton = screen.queryByRole('button', { name: '清除已存密钥' });
+    if (clearButton) {
+      expect(clearButton).toBeDisabled();
+      await fireEvent.click(clearButton);
+    }
+
+    expect(mocks.settingsBackend.saveAiSettings).not.toHaveBeenCalled();
+    expect(mocks.settingsBackend.clearProviderApiKey).not.toHaveBeenCalled();
+  });
+
+  it('does not write settings when panel save and clear events fire after initial load failure', async () => {
+    mocks.settingsBackend.getAiSettings.mockRejectedValueOnce(new Error('加载 AI 设置失败'));
+    mocks.panelControl.forceEventEmitter = true;
+
+    render(SettingsPage);
+
+    expect(await screen.findByText('加载 AI 设置失败')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: '强制保存' }));
+    await fireEvent.click(screen.getByRole('button', { name: '强制清除' }));
+
+    expect(mocks.settingsBackend.saveAiSettings).not.toHaveBeenCalled();
+    expect(mocks.settingsBackend.clearProviderApiKey).not.toHaveBeenCalled();
+  });
+});

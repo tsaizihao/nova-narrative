@@ -1,10 +1,6 @@
 <script lang="ts">
   import { afterUpdate, createEventDispatcher, onMount } from 'svelte';
-  import type {
-    AiProviderKind,
-    AppAiSettingsSnapshot,
-    SaveAiSettingsInput
-  } from '$lib/types';
+  import type { AiProviderKind, AppAiSettingsSnapshot } from '$lib/types';
   import type { SavedProjectCardEntry } from '$lib/modules/projects/library';
   import { readImportedTextFile } from '$lib/text-import';
 
@@ -26,30 +22,23 @@
       has_api_key: false
     }
   };
-  export let aiDraft: SaveAiSettingsInput = {
-    selected_provider: 'heuristic',
-    openai_compatible: {
-      base_url: '',
-      model: '',
-      api_key: ''
-    },
-    openrouter: {
-      base_url: 'https://openrouter.ai/api/v1',
-      model: '',
-      api_key: ''
-    }
-  };
-  export let settingsBusy = false;
+  export let settingsPrompt = '';
 
   let novelTextarea: HTMLTextAreaElement | null = null;
   let selectedProvider: AiProviderKind = 'heuristic';
-  let activeSnapshot = aiSettings.openai_compatible;
-  let activeDraft = aiDraft.openai_compatible;
-  let externalProviderIncomplete = false;
+  let providerSnapshot = aiSettings.openai_compatible;
+  let providerStatus = '离线模式，无需额外配置';
+  let currentModelText = '未设置模型';
+  let apiKeyStatus = '不需要';
   let buildDisabled = false;
 
   const MIN_TEXTAREA_HEIGHT = 320;
   const fieldBoxStyle = 'box-sizing: border-box; max-width: 100%;';
+  const heuristicSummarySnapshot = {
+    base_url: '',
+    model: '离线启发式',
+    has_api_key: false
+  };
 
   const dispatch = createEventDispatcher<{
     submit: void;
@@ -58,12 +47,7 @@
     fileLoaded: void;
     updateProjectName: string;
     updateNovelText: string;
-    updateAiProvider: AiProviderKind;
-    updateAiBaseUrl: string;
-    updateAiModel: string;
-    updateAiApiKey: string;
-    saveAiSettings: void;
-    clearProviderApiKey: AiProviderKind;
+    openSettings: void;
     openProject: string;
   }>();
 
@@ -116,16 +100,25 @@
     syncNovelTextareaHeight();
   });
 
-  $: selectedProvider = aiDraft.selected_provider;
-  $: activeSnapshot =
-    selectedProvider === 'openrouter' ? aiSettings.openrouter : aiSettings.openai_compatible;
-  $: activeDraft =
-    selectedProvider === 'openrouter' ? aiDraft.openrouter : aiDraft.openai_compatible;
-  $: externalProviderIncomplete =
-    selectedProvider !== 'heuristic' &&
-    (!activeSnapshot.base_url.trim() || !activeSnapshot.model.trim() || !activeSnapshot.has_api_key);
-  $: buildDisabled =
-    busy || !projectName.trim() || !novelText.trim() || externalProviderIncomplete;
+  $: selectedProvider = aiSettings.selected_provider;
+  $: providerSnapshot =
+    selectedProvider === 'heuristic'
+      ? heuristicSummarySnapshot
+      : selectedProvider === 'openrouter'
+        ? aiSettings.openrouter
+        : aiSettings.openai_compatible;
+  $: providerStatus =
+    selectedProvider === 'heuristic'
+      ? '离线模式，无需额外配置'
+      : providerSnapshot.base_url.trim() &&
+          providerSnapshot.model.trim() &&
+          providerSnapshot.has_api_key
+        ? '配置已就绪'
+        : '配置未完成';
+  $: currentModelText = providerSnapshot.model.trim() || '未设置模型';
+  $: apiKeyStatus =
+    selectedProvider === 'heuristic' ? '不需要' : providerSnapshot.has_api_key ? '已保存' : '未保存';
+  $: buildDisabled = busy || !projectName.trim() || !novelText.trim();
 </script>
 
 <section class="import-layout">
@@ -223,95 +216,40 @@
         ></textarea>
       </label>
 
-      <section class="provider-panel">
-        <div class="provider-head">
+      <section class="settings-summary">
+        <div class="summary-head">
           <div>
-            <p class="label">AI Provider</p>
-            <h3>接口设置</h3>
+            <p class="label">AI 设置</p>
+            <h3>当前摘要</h3>
           </div>
-          {#if selectedProvider !== 'heuristic'}
-            <span class:ready={activeSnapshot.has_api_key} class="status-pill">
-              {activeSnapshot.has_api_key ? '已保存 API key' : '未保存 API key'}
-            </span>
-          {/if}
+          <button type="button" class="ghost quiet summary-action" on:click={() => dispatch('openSettings')}>
+            去配置
+          </button>
         </div>
 
-        <label>
-          <span>接口类型</span>
-          <select
-            style={fieldBoxStyle}
-            value={selectedProvider}
-            on:change={(event) => dispatch('updateAiProvider', event.currentTarget.value as AiProviderKind)}
-            disabled={busy || settingsBusy}
-          >
-            {#each Object.entries(providerLabels) as [value, label]}
-              <option value={value}>{label}</option>
-            {/each}
-          </select>
-        </label>
-
-        {#if selectedProvider !== 'heuristic'}
-          <div class="provider-grid">
-            <label>
-              <span>Base URL</span>
-              <input
-                style={fieldBoxStyle}
-                value={activeDraft.base_url}
-                on:input={(event) => dispatch('updateAiBaseUrl', event.currentTarget.value)}
-                placeholder={selectedProvider === 'openrouter'
-                  ? 'https://openrouter.ai/api/v1'
-                  : 'https://api.openai.com/v1'}
-                disabled={busy || settingsBusy}
-              />
-            </label>
-
-            <label>
-              <span>模型</span>
-              <input
-                style={fieldBoxStyle}
-                value={activeDraft.model}
-                on:input={(event) => dispatch('updateAiModel', event.currentTarget.value)}
-                placeholder={selectedProvider === 'openrouter' ? 'openai/gpt-4o-mini' : 'gpt-4o-mini'}
-                disabled={busy || settingsBusy}
-              />
-            </label>
-          </div>
-
-          <label>
+        <div class="summary-grid">
+          <article class="meta-block">
+            <span>当前 Provider</span>
+            <strong>{providerLabels[selectedProvider]}</strong>
+          </article>
+          <article class="meta-block">
+            <span>接口状态</span>
+            <strong class:status-ready={providerStatus === '配置已就绪' || selectedProvider === 'heuristic'}>
+              {providerStatus}
+            </strong>
+          </article>
+          <article class="meta-block">
+            <span>当前模型</span>
+            <strong>{currentModelText}</strong>
+          </article>
+          <article class="meta-block">
             <span>API key</span>
-            <input
-              style={fieldBoxStyle}
-              type="password"
-              value={activeDraft.api_key ?? ''}
-              on:input={(event) => dispatch('updateAiApiKey', event.currentTarget.value)}
-              placeholder={activeSnapshot.has_api_key ? '输入新 key 可覆盖已保存密钥' : '输入后点击保存接口设置'}
-              disabled={busy || settingsBusy}
-            />
-          </label>
+            <strong>{apiKeyStatus}</strong>
+          </article>
+        </div>
 
-          <div class="provider-actions">
-            <button
-              type="button"
-              class="ghost"
-              on:click={() => dispatch('saveAiSettings')}
-              disabled={busy || settingsBusy}
-            >
-              {settingsBusy ? '保存中' : '保存接口设置'}
-            </button>
-
-            <button
-              type="button"
-              class="ghost quiet"
-              on:click={() => dispatch('clearProviderApiKey', selectedProvider)}
-              disabled={busy || settingsBusy || !activeSnapshot.has_api_key}
-            >
-              清除已存密钥
-            </button>
-          </div>
-
-          {#if externalProviderIncomplete}
-            <p class="hint">需要填写 base URL、模型和 API key</p>
-          {/if}
+        {#if settingsPrompt.trim()}
+          <p class="summary-hint">{settingsPrompt}</p>
         {/if}
       </section>
 
@@ -604,8 +542,7 @@
   }
 
   input,
-  textarea,
-  select {
+  textarea {
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
@@ -622,64 +559,67 @@
     min-height: 52px;
   }
 
-  select {
-    min-height: 52px;
-  }
-
   textarea {
     min-height: 320px;
     line-height: 1.72;
     overflow-y: hidden;
   }
 
-  .provider-panel {
+  .settings-summary {
     display: grid;
     gap: 14px;
-    padding: 18px;
-    border-radius: 22px;
-    background: rgba(255, 255, 255, 0.56);
-    border: 1px solid rgba(121, 103, 81, 0.12);
+    padding: 18px 20px;
+    border-radius: 20px;
+    background: rgba(121, 103, 81, 0.05);
+    border: 1px solid rgba(121, 103, 81, 0.1);
   }
 
-  .provider-head {
+  .summary-head {
     display: flex;
     justify-content: space-between;
     gap: 12px;
-    align-items: flex-start;
+    align-items: center;
   }
 
-  .provider-grid {
+  .summary-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
 
-  .provider-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+  .meta-block {
+    display: grid;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(255, 253, 252, 0.9);
+    border: 1px solid rgba(121, 103, 81, 0.08);
   }
 
-  .status-pill {
-    display: inline-flex;
-    align-items: center;
-    min-height: 30px;
-    padding: 0 12px;
-    border-radius: 999px;
-    background: rgba(121, 103, 81, 0.08);
-    color: #7c6753;
+  .meta-block span {
+    color: rgba(92, 73, 55, 0.7);
     font-size: 0.82rem;
   }
 
-  .status-pill.ready {
-    background: rgba(31, 106, 87, 0.14);
+  .meta-block strong {
+    color: #2f261d;
+    font-size: 0.94rem;
+    line-height: 1.5;
+  }
+
+  .status-ready {
     color: #1f6a57;
   }
 
-  .hint {
+  .summary-action {
+    padding-inline: 16px;
+  }
+
+  .summary-hint {
     margin: 0;
     color: rgba(92, 73, 55, 0.72);
     font-size: 0.9rem;
+    line-height: 1.6;
   }
 
   .primary,
@@ -736,7 +676,7 @@
       padding: 26px;
     }
 
-    .provider-grid {
+    .summary-grid {
       grid-template-columns: 1fr;
     }
 
